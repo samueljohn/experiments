@@ -1,4 +1,6 @@
 '''
+Run computer simulation experiments and configure them.
+
 @copyright: 
     2009-2011, Samuel John
 @author: 
@@ -20,14 +22,13 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
 
-from experiments import ( Phase, Experiment, get_version_string,
+from experiment import ( Phase, Experiment, get_version_string,
                           timehost_string, host_string, time_string )
 from config import Config
 from loop_unroller import Unroller
 
-__version__ = '0.9'
+__version__ = '0.9.1'
 
-# todo: upload to github
 # todo: refactor experiments.py into separate files
 # todo: tests here
 

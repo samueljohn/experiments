@@ -49,7 +49,7 @@ call ex.run('Train') if the Experiment object is called ex.
    limitations under the License.
    
 
-@todo: Add an Buffer logging handler that stores pickeled versions of the
+@todo: Use the Buffer logging handler that stores pickeled versions of the
        LogRecords and also add some viewer tools that can display log messages
        with on-the-fly filtering (e.g. based on logger hierarchy)
 @todo: Switch to python 2.7's argparse
@@ -72,7 +72,7 @@ import shutil
 import sys
 import time
 import unittest
-from loop_unroller import Unroller
+from experiments import Unroller
 from config import Config
 
 
@@ -112,6 +112,22 @@ def get_version_string( version_tuple ):
     return s
 
 
+def enable_logging(loglevel=logging.INFO, stream=None): 
+    '''Shorthand to globally enable the logging to stderr.'''
+    rootLogger = logging.getLogger()
+    rootLogger.setLevel(loglevel)
+    if len(rootLogger.handlers)==0:
+        rootLogger.setLevel(loglevel)
+        #rootLogger.handlers = []
+        loggingStderrHandler = logging.StreamHandler(stream=stream )
+        #loggingStderrHandler.setLevel( loglevel )
+        formatter = logging.Formatter('%(levelname)-7s %(name)10s: %(message)s')
+        loggingStderrHandler.setFormatter(formatter)
+        rootLogger.addHandler(loggingStderrHandler)
+    else:
+        print('enable_logging(): StreamHandler not added, because logging.getLogger().handlers was not empty:', rootLogger.handlers)
+
+
 
 class Phase(object):
     '''A Phase is a step that is carried out for the experiment. Is has a 
@@ -127,7 +143,7 @@ class Phase(object):
         
     def __init__(self, wrap_function=None ):
         '''You can define your phase as a function and pass it to the __init__.'''
-        if wrap_function:
+        if wrap_function is not None:
             self.wrap_function = wrap_function
             self._name = self.wrap_function.__name__
         else:
@@ -139,16 +155,18 @@ class Phase(object):
     @property
     def name(self):
         try:
-            n = self._name
-            return n
+            return self._name
         except:
             pass
         return type(self).__name__
     
             
     def run(self, ex=None, config=None, result=None, **kwargs):
-        '''Run this phase.'''
-        r = self.wrap_function(ex, config, result, **kwargs)
+        '''Run this phase. You will probably want to overwrite this method.'''
+        try:
+            r = self.wrap_function(ex, config=config, result=result, **kwargs)
+        except TypeError:
+            r = self.wrap_function(ex, **kwargs)
         self.run_counter += 1
         return r
 
@@ -168,12 +186,11 @@ class Phase(object):
 
     def __call__(self, ex=None, config=None, result=None, **kwargs):
         '''Allow to call this object directly instead of run().'''
-        if config is None and ex is not None:
-            config = ex.CONFIG
-        if result is None and ex is not None:
-            result = ex.RESULT
-        return self.run(ex=ex, config=config, result=result, **kwargs)
-    
+        try:
+            return self.run(ex, config=config, result=result, **kwargs)
+        except TypeError:
+            return self.run(ex)
+
     
     def __str__(self):
         return self.name+'-phase'
@@ -183,7 +200,7 @@ class Phase(object):
 class Experiment(object):
     '''
     Experiment. A support class to configure and run python experiments with
-    different phases and configuration __options.
+    different phases and configuration options.
 
     Usage in your program:
 
@@ -193,7 +210,7 @@ class Experiment(object):
                      phases=(GenTrainData(), Train(), ShowOutputs()),
                      version=(1.0.2),
                      greeting='Learn a SFA hierarchy on moving and zooming 1d patterns.',
-                     author='Samuel John <HONDA@SamuelJohn.de>')
+                     author='Samuel John')
         #Then:
 
         ex.log.debug('foo')                  # easy access to logger
@@ -203,7 +220,7 @@ class Experiment(object):
         ex.version                           # The version of the experiment.
         ex.unique_ending                     # A unique string (date, host...)
         ex.saveresult                        # Should the resultfile be saved
-        ex.resultfile                            # the resultfile
+        ex.resultfile                        # the resultfile
         ex.matplotlib_backend                # The backend for matplotlib
         ex.NET                               # optional the mdp network
         ex.markers                           # some matplotlib markers
@@ -219,7 +236,7 @@ class Experiment(object):
             ex.run(pahses=["GenTrainData","Train"])
             ex.memory()
             ex.RESULT.keys()
-            ex.log.info("blabla")
+            ex.log.info("That was fun!")
             ex.save()
 
 
@@ -536,9 +553,9 @@ class Experiment(object):
             stderrloglevel = self.loglevels[stderrloglevel]
         stderrloglevel = int(stderrloglevel)
 
-        #diss_site.enable_logging(loglevel=loglevel)
-        #diss_site.loggingStderrHandler.setLevel( stderrloglevel )
+        enable_logging(loglevel=loglevel)
         rootLogger = logging.getLogger()
+        rootLogger.handlers[0].setLevel(stderrloglevel)
         
         if logfile:
             backupFile(logfile, '.bak')
@@ -653,7 +670,7 @@ class Experiment(object):
             self.run(phases=self.__args, force=True)
         elif len(self.__args) == 0 and not interactive:
             self.log.debug('Phases to run now: all.')
-            self.run(phases=None, force=False)
+            self.run(phases='all', force=False)
         elif interactive:
             self.log.debug('Running no phases automatically. You have to call ex.run("name_of_phase").')
             
@@ -671,12 +688,14 @@ class Experiment(object):
             if os.path.exists(config):
                 # todo: replace this by a cleaner imp.load_source() call:
                 used_config = 'used_config_'+time_string()+'__'+str(time.time()).split('.')[-1]+'.py'
-                backupFile(used_config)
+                backupFile(used_config) 
                 shutil.copy(config, used_config)
                 rootLogger.info('Copied config %s to %s', config, used_config)
                 assert os.path.exists(os.curdir + os.sep + used_config)
-                if used_config.endswith('.py'): configimport = used_config[:-3]
-                else: configimport = used_config
+                if used_config.endswith('.py'): 
+                    configimport = used_config[:-3]
+                else: 
+                    configimport = used_config
                 configdir = os.curdir
                 rootLogger.info('Config: import "%s" from path %s', configimport, os.path.abspath(configdir))
                 sys.path.insert(0, os.path.abspath(configdir)) # temporary add . to the pythonpath
@@ -728,12 +747,16 @@ class Experiment(object):
             raise ValueError('The arg phases to be run must be a list of strings.')
         return None # no phase found
     
+    
+    def __call__(self, **kws):
+        return self.run(**kws)
+
 
     def run(self, phases='all', stopOnException=False, force=False, nosave=False, **kwargs):
         '''Actually run this experiment or more precisely the phases.
 
         @param phases:
-            If None, all phases, defined in self.phases are run.
+            If 'all', then all phases, defined in self.phases are executed.
             Otherwise only the phases of the list of strings *phases*.
             Each phase to be run is a string
             with the name of a class (internally phases[i].__class__.__name__
@@ -760,29 +783,37 @@ class Experiment(object):
                     self.log.info('Forced to run this phase (skipping needsrun() and is_allowed_to_run() check).')
                 else:
                     try:
-                        needsrun = P.needsrun(ex=self, config=ex.CONFIG, result=ex.RESULT)
+                        try:
+                            needsrun = P.needsrun(ex=self, config=self.CONFIG, result=self.RESULT)
+                        except TypeError: # call signature wrong 
+                            needsrun = P.needsrun(self) # legacy mode
                     except KeyError, e:
                         needsrun = True
                         self.log.debug('Need to run %s because an item was probably not found in ex.RESULTS. (KeyError in needsrun())', P)
                 # "allowed" is stronger than "force"
                 try:
-                    allowed = P.is_allowed_to_run(ex=self, config=self.CONFIG, result=self.RESULT)
+                    try:
+                        allowed = P.is_allowed_to_run(ex=self, config=self.CONFIG, result=self.RESULT)
+                    except TypeError:
+                        allowed = P.is_allowed_to_run(self)
                 except KeyError, e:
                     self.log.debug('Assuming to forbid run %s because an item was probably not found in ex.RESULTS. (KeyError in is_allowed_to_run().)', P)
                     allowed = False
                 if needsrun and allowed:
                     P(ex=self, config=self.CONFIG, result=self.RESULT, **kwargs)
                 elif not allowed:
-                    self.log.error('The %s is not allowed to be run at this point',P)
+                    self.log.error('The %s is not allowed to be run at this point.',P)
                 elif not needsrun:
-                    self.log.warn('%s needs not to be run. Using cached results', P)
+                    self.log.warn('%s needs not to be run. Using cached results.', P)
             except Exception, e:
-                self.log.exception('Exception in %s', P)
+                self.log.exception('Exception in %s.', P)
                 if stopOnException:
                     tac = time.time()
-                    self.log.warn('Breaking %s because stopOnException==True.', P, tac-tic)
+                    self.log.warn('ABORT: Breaking %s because stopOnException==True.', P, tac-tic)
                     self.log.info('\n================================================================================\n\n\n')
                     break # but still write the results
+                #else:
+                #    self.log.exception('Continuing and ignoring this Exception: ' + str(e))
             tac = time.time()
             self.log.info('Finished %s. Took %g seconds.', P, tac-tic)
             self.log.info('\n================================================================================\n\n\n')
@@ -850,7 +881,7 @@ class Experiment(object):
             stdout_list = process.communicate()[0].split('\n')
             mem = int(stdout_list[0])
         except Exception, e:
-            print("Cannot get amount of memory used by this process." + e)
+            print("Cannot get amount of memory used by this process." + str(e))
             return -1
         return mem
 
@@ -861,7 +892,7 @@ class Experiment(object):
             net = self.RESULT.network
         for node in net:
             if node.is_trainable() and node.is_training():
-                return True
+                return True # One Node is enough
         return False
 
 
@@ -1023,7 +1054,7 @@ class Shell(object):
 
     def addCommand(self, command):
         if self.finished:
-            raise Exception('Cannot addCommand() after run().')
+            raise ValueError('Cannot addCommand() after run().')
         self.execute_str += str(command) + "\n"
 
     def __call__(self,arg):
@@ -1064,6 +1095,16 @@ done
         sh('echo "Shell testing successful"')
         sh.run()
 
+    def test_cwd(self):
+        sh = Shell(cwd=os.curdir)
+        sh('echo spam')
+        sh.run()
+
+    @raises(ValueError)
+    def test_no_commands_after_run(self):
+        sh = Shell()
+        sh.run()
+        sh('echo spam')
 
 
 class TestBackupFile(unittest.TestCase):
@@ -1140,11 +1181,11 @@ class TestExperiment(unittest.TestCase):
         class TestPhase1(Phase):
             def __init__(s):
                 Phase.__init__(s)
-                s.counter_run = 0
-            def run(s, result, config):
+                s.run_counter = 0
+            def run(s, ex, result, config):
                 result['foo'] = 'spam'
-                s.counter_run += 1
-            def needsrun(s, config, result):
+                s.run_counter += 1
+            def needsrun(s, ex, config, result):
                 if result.has_key('foo'):
                     return False
                 else:
@@ -1152,16 +1193,16 @@ class TestExperiment(unittest.TestCase):
         class AnotherTestPhase(Phase):
             def __init__(s):
                 Phase.__init__(s)
-                s.counter_run = 0
+                s.run_counter = 0
             def run(s, ex, config, result):
                 ex.RESULT['bar'] = 'eggs'
-                s.counter_run += 1
+                s.run_counter += 1
         class PhaseThatFails(Phase):
             def __init__(s):
                 Phase.__init__(s)
-                s.counter_run = 0
+                s.run_counter = 0
             def run(s, ex, config, result):
-                s.counter_run += 1
+                s.run_counter += 1
                 raise Exception('boooom! This exception is thrown by intention to test the behavior of the run.')
         def phasefunction(ex):
             ex.RESULT.laa = 'lilu'
@@ -1172,18 +1213,18 @@ class TestExperiment(unittest.TestCase):
         self.phasefunction = phasefunction
             
         self.p1 = TestPhase1()
-        self.p2 = TestPhase1()
+        self.p2 = TestPhase1 # given as a class not instance by intention!
         self.p3 = AnotherTestPhase()
         self.p4 = Phase()
         self.p5 = PhaseThatFails()
         self.p6 = Phase(phasefunction)
     
     
-    def TearDown(self):
+    def tearDown(self):
         os.chdir(self.olddir)    
         shutil.rmtree('/tmp/test-experiments/', ignore_errors=True)
         
-    
+
     def test_version_tuple(self):    
         ex = Experiment(config=None,version=0)
         assert get_version_string(ex.version) == '0.0.0'
@@ -1211,7 +1252,6 @@ class TestExperiment(unittest.TestCase):
         assert get_version_string(ex.version) == '1.2.3.4'
         
         
-        
     def test_empty_experiment(self):
         '''Empty experiment has a RESULT and log.'''
         ex = Experiment(config=None)
@@ -1227,9 +1267,10 @@ class TestExperiment(unittest.TestCase):
         ex.CONFIG.foo = 'spam'
         ex.showplots = False # avoid PLT.show()
         ex.run() 
-        del ex
+        ex() # direct call of the object possible
+        del ex # cleanup
     
-    
+
     def test_use_config_via_attributes(self):
         ex = Experiment(config=None)
         ex.CONFIG.foo = 'bar'
@@ -1240,9 +1281,10 @@ class TestExperiment(unittest.TestCase):
         assert ex.RESULT.res1 == 'ham'
         assert ex.RESULT['res1'] == 'ham'
     
-    
+
     def test_reuse(self):
         '''Does a "reuse"-file parameter actually fill the RESULT dict'''
+        original_sysarg = copy.copy(sys.argv)
         path = '/tmp/test_reuse.shelve'
         backupFile(path)
         a = 123
@@ -1296,14 +1338,15 @@ class TestExperiment(unittest.TestCase):
             self.assertEqual(b[i], ex.RESULT.b[i], 'b should be the same for item %s and %s' % (str(b[i]),str(ex.RESULT.b[i])) )
         del ex
         os.remove(path)
-    
-    
+        sys.argv = original_sysarg
+        
+
     def test_simple_experiment_and_phases(self):
         ex = Experiment(phases=(self.p1, self.p2, self.p3, self.p4, self.p5, self.p6), config=None)
         self.assertEqual(len(ex.phases),6, 'This experiment in this test should have 6 phases')
         del ex
         
-    
+
     def test_copy_config_to_curdir(self):
         import os
         oldpath = os.path.abspath(os.curdir)
@@ -1333,6 +1376,7 @@ config.bar      = ['eggs','ham']
         shutil.rmtree('/tmp/test-config/', ignore_errors=True)
         shutil.rmtree('/tmp/test-run/', ignore_errors=True)
         del ex
+
 
     @SkipTest
     def test_config_imports_other_config(self):
@@ -1372,7 +1416,7 @@ config.bar      = 'ham'
         shutil.rmtree('/tmp/test-run2/', ignore_errors=True)
         del ex
     
-    
+
     def test_config_as_dict_given(self):
         d = dict(a=1,b='spam')
         ex = Experiment(config=d)
@@ -1381,7 +1425,7 @@ config.bar      = 'ham'
         assert ex.CONFIG.b == d['b']
         del ex
     
-    
+
     def test_loadnet(self):
         # If this test reports: "error: db type could not be determined", you 
         # have python installed without gdbm support.
@@ -1415,10 +1459,11 @@ config.bar      = 'ham'
         os.remove(path)
         os.remove(path2)
     
-    
+
     def test_run_phase_with_no_phases(self):
         ex = Experiment(phases=None, config=None)
         ex.run() # should be ok 
+        ex()
         ex.run(phases='all') # should be ok
         self.assertRaises(ValueError, ex.run, 'somethingstupid') 
         del ex
@@ -1431,9 +1476,10 @@ config.bar      = 'ham'
 
     def test_run_phase_all(self):
         ex = Experiment(phases=(self.TestPhase1(), self.AnotherTestPhase(), self.PhaseThatFails(), self.phasefunction), config=None)
-        ex.run() # even if a phase fails this should be ok
-        for p in ex.phases[0:3]:
-            assert p.counter_run == 1
+        ex.run() # implicit 'all'. Even if a phase fails this should be ok
+        for p in ex.phases:
+            print(type(p))
+            assert p.run_counter == 1, str(p) + ': ' + str(p.run_counter)
         del ex
 
 
@@ -1442,37 +1488,37 @@ config.bar      = 'ham'
         ex.run() # even if a phase fails this should be ok
         del ex
 
-        
+
     def test_run_phase_that_does_not_exist(self):
         ex = Experiment(phases=(self.TestPhase1(), self.AnotherTestPhase(), self.PhaseThatFails()), config=None)
         self.assertRaises(ValueError, ex.run, 'Phase') 
         self.assertRaises(ValueError, ex.run, '' ) 
         del ex
 
-
+    
     def test_run_phase_by_list_of_classnames(self):
         ex = Experiment(phases=(self.TestPhase1(), self.AnotherTestPhase(), self.PhaseThatFails()), config=None, stderrloglevel='DEBUG')
         assert len(ex.phases) == 3
         for p in ex.phases:
-            assert p.counter_run == 0, p.counter_run
+            assert p.run_counter == 0, p.run_counter
         ex.run(phases='TestPhase1')
         ex.run(phases='AnotherTestPhase')
         ex.run(phases='PhaseThatFails')
         for p in ex.phases:
-            assert p.counter_run == 1, str(p)+str(p.counter_run)
+            assert p.run_counter == 1, str(p)+': '+str(p.run_counter)
         ex.run(phases='TEstPHAse1')
         ex.run(phases=['anothertestphase'])
         ex.run(phases=(' PhaseThatFAILS'))
-        assert ex.phases[0].counter_run == 1, "TestPhase1 should have needsrun() returning false."
+        assert ex.phases[0].run_counter == 1, "TestPhase1 should have needsrun() returning false."
         for p in ex.phases[1:]: # TestPhase1 has needsrerun and therefore counter will not be incr.
-            assert p.counter_run == 2,  str(p) + ' counter=' + str(p.counter_run)
+            assert p.run_counter == 2,  str(p) + ' counter=' + str(p.run_counter)
         ex.run(phases=['TestPhase1','AnotherTestPhase','phasethatfails'])
-        assert ex.phases[0].counter_run == 1, "TestPhase1 should have needsrun() returning false."
+        assert ex.phases[0].run_counter == 1, "TestPhase1 should have needsrun() returning false."
         for p in ex.phases[1:]:
-            assert p.counter_run == 3
+            assert p.run_counter == 3
         ex.run()
         for p in ex.phases[1:]:
-            assert p.counter_run == 4
+            assert p.run_counter == 4
             
 
     def test_saveresult(self):
@@ -1486,7 +1532,7 @@ config.bar      = 'ham'
                         config=None)
         ex.run()
         assert ex.config.RESULT_FILE == None
-        assert len(ex.RESULT) > 0 # even if the results should not be stored, there should be a RESULT object containing 'foo'. See SetUp()
+        assert len(ex.RESULT) > 0, str(ex.RESULT) # even if the results should not be stored, there should be a RESULT object containing 'foo'. See SetUp()
         del ex
 
         ex = Experiment(saveresult=True, 
@@ -1505,11 +1551,11 @@ config.bar      = 'ham'
         ex.run()
         del ex
         
-        
+
     def test_loglevels_as_int(self):
         ex = Experiment(loglevel=0)
-        ex = Experiment(stderrloglevel=1)
-        ex = Experiment(fileloglevel=12)
+        ex = Experiment(stderrloglevel=20)
+        ex = Experiment(fileloglevel=30)
         
         ex = Experiment(loglevel='warn')
         ex = Experiment(stderrloglevel=' INFO ')
@@ -1522,8 +1568,22 @@ config.bar      = 'ham'
         sys.argv = ['ignoreme', '--stderrloglevel', 'info']
         ex = Experiment(interactive=False, logfile=None, fileloglevel=10)
         
+        
+    @raises(ValueError)
+    def test_name_all_is_not_allowed_for_the_wrapped_function(self):
+        def all(a): pass
+        p = Phase(all)
     
-    
+    @raises(ValueError)
+    def test_name_all_is_not_allowed_for_a_Phase(self):
+        class All(Phase): pass
+        p = All()
+        
+
+    def test_memory(self):
+        ex = Experiment()
+        ex.memory()
+
 if __name__ == "__main__":
 	unittest.main()
 

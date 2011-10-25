@@ -685,24 +685,36 @@ class Experiment(object):
             self.config = Config(config)
             rootLogger.info('Using mapping ' + str(config.__class__.__name__) + ' as config.')
         else:
+            rootLogger.info('Assuming %s is a path to a python file that contains a "config" object or a dict with that name.', config)
             if os.path.exists(config):
+                global_dict = {}
+                execfile(config, global_dict)
                 # todo: replace this by a cleaner imp.load_source() call:
-                used_config = 'used_config_'+time_string()+'__'+str(time.time()).split('.')[-1]+'.py'
-                backupFile(used_config) 
-                shutil.copy(config, used_config)
-                rootLogger.info('Copied config %s to %s', config, used_config)
-                assert os.path.exists(os.curdir + os.sep + used_config)
-                if used_config.endswith('.py'): 
-                    configimport = used_config[:-3]
-                else: 
-                    configimport = used_config
-                configdir = os.curdir
-                rootLogger.info('Config: import "%s" from path %s', configimport, os.path.abspath(configdir))
-                sys.path.insert(0, os.path.abspath(configdir)) # temporary add . to the pythonpath
-                rootLogger.debug('Prepended %s to sys.path in order to import %s.', sys.path[0], used_config)
-                self._config_module = __import__(configimport)
-                self.config = self._config_module.config # todo: scan through all items in that module and take the first one that is of type(Config)
-                sys.path.pop(0)
+                #used_config = 'used_config_'+time_string()+'__'+str(time.time()).split('.')[-1]+'.py'
+                #backupFile(used_config) 
+                #shutil.copy(config, used_config)
+                #rootLogger.info('Copied config %s to %s', config, used_config)
+                #assert os.path.exists(os.curdir + os.sep + used_config)
+                #if used_config.endswith('.py'): 
+                #    configimport = used_config[:-3]
+                #else: 
+                #    configimport = used_config
+                #configdir = os.curdir
+                #rootLogger.info('Config: import "%s" from path %s', configimport, os.path.abspath(configdir))
+                #sys.path.insert(0, os.path.abspath(configdir)) # temporary add . to the pythonpath
+                #rootLogger.debug('Prepended %s to sys.path in order to import %s.', sys.path[0], used_config)
+                #self._config_module = __import__(configimport)
+                try:
+                    # Is there an item named "config"
+                    self.config = global_dict['config']
+                    rootLogger.info('Using item "config" from %s', config)
+                except KeyError, ke:
+                    rootLogger.warning('No item named "config" found in %s. Now searching for an instance of experiments.Config... ', config)
+                    for i in global_dict:
+                        if isinstance(i, Config): 
+                            rootLogger.info('Found and instance of experiments.Config: %s ', i)
+                            self.config = i
+                    
             else:
                 rootLogger.error('Specified config file %s does not exist.', config)
                 raise IOError('Config file does not exist')

@@ -22,13 +22,13 @@ Run computer simulation experiments and configure them.
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
 
-from experiment import ( Phase, Experiment, get_version_string,
+from phase import Phase
+from experiment import ( Experiment, get_version_string,
                           timehost_string, host_string, time_string )
 from config import Config
 from loop_unroller import Unroller
 
-__version__ = '0.9.1'
+__version__ = '0.9.3'
 
 # todo: refactor experiments.py into separate files
 # todo: tests here
-

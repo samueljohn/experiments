@@ -8,3 +8,7 @@ experiment.pyc
 experiments.pyc
 
 loop_unroller.pyc
+
+phase.pyc
+
+__init__.pyc

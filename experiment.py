@@ -8,26 +8,49 @@ mdp networks and a command line or interactive console interface to start a run.
 The basic idea is to separate the program logic of a computer simulation 
 experiment with all its phases (from preparation, over training data generation 
 and training to testing/applying and visualization) from the specific 
-configuration of parameters. 
-The parameters can be how many training data is used but also the machine 
-learning parameters or methods.
+configuration of parameters.
+The parameters are stored in a separate python file which contains a 
+experiments.Config instance. Common parameters are the number of training 
+samples, number of iterations and so on.
 
 A common problem is to keep track of different runs with different parameters. 
 The classes here help to easily define the parameters and storing
 all the settings and results to files.
 
+Features:
+    * Nicely formatted logging to stderr and a log file with different options.
+    * Command line interface or interactive usage (e.g. from IPython)
+    * Separate different steps of your experiment into phases.
+    * Phases can be auto-wrapped around functions.
+    * Phases can optionally implement needsrun() to skip it if not needed.
+    * Phases can optionally implement is_allowed_to_run() for (simple) dependency.
+    * Results are dumped after each phase. If something went wrong, you can
+      investigate and continue the already written results.
+    * Printing the total amount of memory currently used by this python process.
+    * Exception-robust: An exception in a phase does not break the whole 
+      experiment and later phases can still be executed. Results are dumped.
+    * The name of the experiment is used to create a dir for the log and 
+      result file.
+    * Additional custom command line options can be added.
+    * Optionally call pylab.show() at the end.
+    * You can continue an older run and pick up the results computed there 
+      and continue to run the remaining needed phases. Thereby you can brake 
+      dwon a large experiment in separate runs (for each phase one).
+    * Version number support.
+    * Report of some configuration setting of the current machine.
+    * A list of matplotlib colors and markers to ease some plotting needs
+      when you iterate over some visual object clases or whatever.
+    * Experimental: loadnet. Load an mdp network
+    * Experimental: batch_train
+
+
+Experimental:
 If you run a bunch of experiments that differ only in a certain parameter (or
 few parameters, you can create something like "baseconfig.py"
 that describes all the parameters for an experiment. Then for a specific run
 you can overwrite some of the setting with another "config.py" 
 (names arbitrary). 
 
-What actually has to be done for the experiment is defined in phases in another
-file (I usually call them run.py).
-
-Then you can start the experiment from the shell via python run.py and have a 
-lot of command line options. Further you can call import run in ipython and then
-call ex.run('Train') if the Experiment object is called ex.
 
 @copyright: 
     2009-2011, Samuel John
@@ -49,6 +72,7 @@ call ex.run('Train') if the Experiment object is called ex.
    limitations under the License.
    
 
+@todo: Add tutorial
 @todo: Use the Buffer logging handler that stores pickeled versions of the
        LogRecords and also add some viewer tools that can display log messages
        with on-the-fly filtering (e.g. based on logger hierarchy)
@@ -57,6 +81,7 @@ call ex.run('Train') if the Experiment object is called ex.
 @todo: Add a support function to copy some stuff (possibly over the network)
        to the CWD (or localdisk / or tmp) 
 @todo  Doc: Add a very simple config.py, run.py to show how cool this is :-)
+@todo  Test and support to use custom options to the command line. (use argpase)
 '''
 
 from __future__ import print_function, division, absolute_import
@@ -72,26 +97,28 @@ import shutil
 import sys
 import time
 import unittest
-from experiments import Unroller
+import platform
+from loop_unroller import Unroller
+from phase import Phase
 from config import Config
 
 
 
 def time_string():
     '''Shorthand for getting the current time in a nice, consistent format.'''
+    # todo: Make this function
     return time.strftime('%Y-%h-%d__%H-%M-%S')
 
 
 def host_string():
     '''Return the network name of this machine.
     Might be handy if run on a cluster to know the host.'''
-    import platform
-    return platform.node()
+    return platform.node().split('.')[0]
 
 
 def timehost_string():
     '''Get a unique string compose of the current time and host.'''
-    return time_string() + '_' + host_string()
+    return time_string() + '_on_' + host_string()
 
 
 def get_version_string( version_tuple ):
@@ -125,75 +152,9 @@ def enable_logging(loglevel=logging.INFO, stream=None):
         loggingStderrHandler.setFormatter(formatter)
         rootLogger.addHandler(loggingStderrHandler)
     else:
-        print('enable_logging(): StreamHandler not added, because logging.getLogger().handlers was not empty:', rootLogger.handlers)
+        pass
+        #print('enable_logging(): StreamHandler not added, because logging.getLogger().handlers was not empty:', rootLogger.handlers)
 
-
-
-class Phase(object):
-    '''A Phase is a step that is carried out for the experiment. Is has a 
-    run() method, which is supposed to do the work and optionally a 
-    needsrun() that may be overwritten to check if a run() is needed.
-    
-    
-    @todo: Add a depends_on functionality
-    @todo: Add run_after and run_before to enforce a certain execution order
-           and make it possible to run the last phase and all prior phases
-           are automatically started.
-    '''
-        
-    def __init__(self, wrap_function=None ):
-        '''You can define your phase as a function and pass it to the __init__.'''
-        if wrap_function is not None:
-            self.wrap_function = wrap_function
-            self._name = self.wrap_function.__name__
-        else:
-            self.wrap_function = lambda ex: None # "do nothing" placeholder
-        self.run_counter = 0
-        if self.name in ('all', 'All', 'ALL'):
-            raise ValueError('Name "all" not allowed for a subclass of Phase.')
-         
-    @property
-    def name(self):
-        try:
-            return self._name
-        except:
-            pass
-        return type(self).__name__
-    
-            
-    def run(self, ex=None, config=None, result=None, **kwargs):
-        '''Run this phase. You will probably want to overwrite this method.'''
-        try:
-            r = self.wrap_function(ex, config=config, result=result, **kwargs)
-        except TypeError:
-            r = self.wrap_function(ex, **kwargs)
-        self.run_counter += 1
-        return r
-
-
-    def needsrun(self, ex=None, config=None, result=None):
-        '''Return True if this phase needs to be run. This function is optional
-        and can inspect the Experiment ex to decide, if itself needs to be run.
-        '''
-        return True # default: always needs to be run
-
-    
-    def is_allowed_to_run(self, ex=None, config=None, result=None):
-        '''Return true, if this phase is allowed to be run now. Default: True.
-        '''
-        return True
-    
-
-    def __call__(self, ex=None, config=None, result=None, **kwargs):
-        '''Allow to call this object directly instead of run().'''
-        try:
-            return self.run(ex, config=config, result=result, **kwargs)
-        except TypeError:
-            return self.run(ex)
-
-    
-    def __str__(self):
-        return self.name+'-phase'
 
 
 
@@ -208,14 +169,14 @@ class Experiment(object):
 
     ex = Experiment( interactive=False if __name__ == '__main__' else True,
                      phases=(GenTrainData(), Train(), ShowOutputs()),
-                     version=(1.0.2),
+                     version=(1,0,2),
                      greeting='Learn a SFA hierarchy on moving and zooming 1d patterns.',
-                     author='Samuel John')
+                     author='Your Name')
         #Then:
 
         ex.log.debug('foo')                  # easy access to logger
         ex.config.whatever...                # access the config file
-        ex.__options.somecommandlineoption     # access the extracted & processed
+        ex.__options.somecommandlineoption   # access the extracted & processed
                                              # command line arguments
         ex.version                           # The version of the experiment.
         ex.unique_ending                     # A unique string (date, host...)
@@ -231,13 +192,13 @@ class Experiment(object):
     In interactive mode, your next steps assuming an Experiment has been 
     created and named ex:
             
-            ex.set_config("path/to/config.py", name="testrun", reuse=None) 
-            ex.phases
-            ex.run(pahses=["GenTrainData","Train"])
-            ex.memory()
-            ex.RESULT.keys()
-            ex.log.info("That was fun!")
-            ex.save()
+      ex.set_config("path/to/config.py", name="testrun", reusefile='old.RESULT') 
+      ex.phases
+      ex.run(phases=["GenTrainData","Train"])
+      ex.memory()
+      ex.result.keys()
+      ex.log.info("That was fun!")
+      ex.save()
 
 
     '''
@@ -254,7 +215,7 @@ class Experiment(object):
                  loglevel='DEBUG',
                  stderrloglevel='INFO',
                  fileloglevel='DEBUG',
-                 reuse='',
+                 reusefile='',
                  resultfile='',
                  saveresult=True,
                  showplots=False, # setting this here to true lets pop up windows during unittests.
@@ -263,10 +224,8 @@ class Experiment(object):
                  matplotlib_backend=''
                  ):
         '''
-        Sets up an OptionParser with some default options for logging support.
-        Check if interactive or command-line invocation and setup reasonable
-        defaults.
-
+        Sets up a new experiment.
+        
         @param phases:
             The different available phases for this experiment. A list of 
             object of the class *Phase*.
@@ -312,7 +271,7 @@ class Experiment(object):
             Log level for the logfile.
         @param stderrloglevel:
             The log level for the stderr.
-        @param reuse:
+        @param reusefile:
             A string (filename) of a shelve file to load and use the
             stuff in there to continue this experiment. (still experimental)
         @param resultfile:
@@ -324,32 +283,34 @@ class Experiment(object):
         @param loadnet:
             Load (a possibly trained) MDP network instead of using the one
             from the config file. (experimental). The network then added
-            as the key 'NET' to the RESULT dict.
+            as the key 'NET' to the result dict.
         @param showplots:
             call matplotlib.pyplot.show() at the end.
 
 
 
         '''
+        self.unique_ending = "_"+timehost_string()
         self.loglevels = {'critical':50, 'error':40, 'warning':30, 'warn':30, 'info':20,
                        'debug':10, 'all':0, 'notset':0        }
-
+        if logfile is True:
+            logfile = timehost_string()+".log"
         self.version = version
         if author is None:
             try:
                 author = os.environ['USER']
             except KeyError:
-                pass
-            
-        self.unique_ending = "_"+timehost_string()
-        
+                pass 
         self.interactive = interactive
-
-        if logfile is True:
-            logfile = name+self.unique_ending+".log"
+        self.author = author
+        self.greeting = greeting
+        self.__logfile = logfile
+        self.__loglevel = loglevel
+        self.__stderrloglevel = stderrloglevel
+        self.__fileloglevel = fileloglevel 
 
         # command arg parsing --------------------------------------------------
-        if not interactive:
+        if not self.interactive:
             if True:#sys.version_info[0]==2 and sys.version_info[1] < 7: # todo: use argparse
                 import optparse
                 from optparse import OptionParser, Option
@@ -376,16 +337,15 @@ class Experiment(object):
                               type=str, dest='name', metavar='STRING',
                               help='Optional. The speaking name for this'
                                    ' experimental run. Will be used '
-                                   'for the logger and for the name of '
-                                   'the logfile and '
-                                   'is often used to create result file'
-                                   'names. Can also be defined in the '
+                                   'for the logger, the logfile '
+                                   'and to create the resultfile. '
+                                   'Can also be defined in the '
                                    'config file itself but will be over'
                                    'written if given here.')
 
                 og.add_option('--reuse',
-                              default=reuse,
-                              type=str, dest='reuse', metavar='SHELVEFILE',
+                              default=reusefile,
+                              type=str, dest='reusefile', metavar='SHELVEFILE',
                               help='Use another (older) shelve file '
                                    'instead of generating all results anew. '
                                    'Depending on what is in SHELVEFILE, '
@@ -492,112 +452,79 @@ class Experiment(object):
             else:
                 raise NotImplementedError('I should impl. argpasrse for python 2.7')
 
-            name            = self.__options.name
-            config          = self.__options.config
+            name    = self.__options.name
+            config  = self.__options.config
             try:
-                loglevel    = self.__options.loglevel.lower().strip()
+                self.__loglevel = self.__options.loglevel.lower().strip()
             except:
-                loglevel    = int(self.__options.loglevel) 
+                self.__loglevel = int(self.__options.loglevel) 
             if self.__options.logfile:
-                logfile     = self.__options.logfile
+                self.__logfile = self.__options.logfile
             try:
-                stderrloglevel  = self.__options.stderrloglevel.lower().strip()
+                self.__stderrloglevel = self.__options.stderrloglevel.lower().strip()
             except:
-                stderrloglevel  = int(self.__options.stderrloglevel)
+                self.__stderrloglevel = int(self.__options.stderrloglevel)
             try: 
-                fileloglevel    = self.__options.fileloglevel.lower().strip()
+                self.__fileloglevel = self.__options.fileloglevel.lower().strip()
             except:
-                fileloglevel    = int(self.__options.fileloglevel)
+                self.__fileloglevel = int(self.__options.fileloglevel)
                 
-            loadnet         = self.__options.loadnet
-            reuse           = self.__options.reuse
-            self.showplots  = self.__options.showplots
-            self.resultfile     = self.__options.resultfile
-            self.saveresult = self.__options.saveresult
+            loadnet                 = self.__options.loadnet
+            reusefile               = self.__options.reusefile
+            self.showplots          = self.__options.showplots
+            self.resultfile         = self.__options.resultfile
+            self.saveresult         = self.__options.saveresult
             self.matplotlib_backend = self.__options.matplotlib_backend
             if self.__options.listphases:
                 print ('Available Phases:\n  ' +
                                         '\n  '.join(str(p) for p in phases) +'\n' )
                 exit(0)
         else:
-            # interactive mode
+            # interactive mode -------------------------------------------------
             print ('Experiment in interactive mode (no sys.argv parsing).')
             try:
-                loglevel        = loglevel.lower().strip()
+                self.__loglevel        = self.__loglevel.lower().strip()
             except: 
-                loglevel        = int(loglevel)
+                self.__loglevel        = int(self.__loglevel)
             try:
-                stderrloglevel  = stderrloglevel.lower().strip()
+                self.__stderrloglevel  = self.__stderrloglevel.lower().strip()
             except: 
-                stderrloglevel  = int(stderrloglevel)
+                self.__stderrloglevel  = int(self.__stderrloglevel)
             try:
-                fileloglevel    = fileloglevel.lower().strip()
+                self.__fileloglevel    = self.__fileloglevel.lower().strip()
             except:
-                fileloglevel    = int(fileloglevel)
-            self.showplots  = showplots
-            self.resultfile     = resultfile
-            self.saveresult = saveresult
+                self.__fileloglevel    = int(self.__fileloglevel)
+            self.showplots          = showplots
+            self.resultfile         = resultfile
+            self.saveresult         = saveresult
             self.matplotlib_backend = matplotlib_backend
-            self.__args = [] # This will lead to no phases run initially
+            self.__args             = [] # This will lead to no phases run initially
 
         # Stderr and file logging-----------------------------------------------
-        if loglevel in self.loglevels.keys():
-            loglevel = self.loglevels[loglevel]
-        loglevel = int(loglevel)
+        if self.__loglevel in self.loglevels.keys():
+            self.__loglevel = self.loglevels[self.__loglevel]
+        self.__loglevel = int(self.__loglevel)
 
-        if fileloglevel in self.loglevels.keys():
-            fileloglevel = self.loglevels[fileloglevel]
-        fileloglevel = int(fileloglevel)
+        if self.__fileloglevel in self.loglevels.keys():
+            self.__fileloglevel = self.loglevels[self.__fileloglevel]
+        self.__fileloglevel = int(self.__fileloglevel)
 
-        if stderrloglevel in self.loglevels.keys():
-            stderrloglevel = self.loglevels[stderrloglevel]
-        stderrloglevel = int(stderrloglevel)
+        if self.__stderrloglevel in self.loglevels.keys():
+            self.__stderrloglevel = self.loglevels[self.__stderrloglevel]
+        self.__stderrloglevel = int(self.__stderrloglevel)
 
-        enable_logging(loglevel=loglevel)
+        enable_logging(loglevel=self.__loglevel)
         rootLogger = logging.getLogger()
-        rootLogger.handlers[0].setLevel(stderrloglevel)
+        rootLogger.handlers[0].setLevel(self.__stderrloglevel)
         
-        if logfile:
-            backupFile(logfile, '.bak')
-            loggingFileHandler = logging.FileHandler( logfile, mode='w' )
-            loggingFileHandler.setLevel( fileloglevel )
-            loggingFileHandler.setFormatter(logging.Formatter('%(levelname)-7s %(name)10s: %(message)s'))
-            rootLogger.addHandler(loggingFileHandler)
-            
-
-        # Print/log infos ------------------------------------------------------
-        welcome =('''
-================================================================================
-  %s
-  Experiment written by %s. (version %s)
-================================================================================''') % \
-        (str(greeting), str(author), get_version_string(self.version))
-        
-        rootLogger.info( welcome)
-        rootLogger.info( time.asctime()  )
-        try:
-            rootLogger.info( 'On %s', os.uname()[1] )
-            rootLogger.info( 'Architecture %s', os.uname()[-1] )
-        except:
-            pass
-        rootLogger.info( 'logfile: ' + str(logfile) )
-        if not interactive:
-            commandline = ""
-            for a in sys.argv:
-                commandline += ' ' + a
-            rootLogger.info( 'Command line args were: ' + commandline)
         print('Global loglevel is', logging.getLevelName( rootLogger.level ) )
-        if logfile:
-            print('Logging to log file: ', logfile )
-            _level = fileloglevel
-            for k,v in self.loglevels.items():
-                if v == fileloglevel: _level = k
-            rootLogger.info('fileloglevel is %s',_level)
-        _level = stderrloglevel
+
+        _level = self.__stderrloglevel
         for k,v in self.loglevels.items():
-            if v == stderrloglevel: _level = k
+            if v == self.__stderrloglevel: _level = k
         rootLogger.info('stderrloglevel is %s',_level)
 
+        # Populating self.phases -----------------------------------------------
         if phases is None:
             self.phases = []
         else:
@@ -614,31 +541,30 @@ class Experiment(object):
                     self.phases.append( p )
         rootLogger.info('Available phases: ' + str(self.phases))
 
-
-        # Trying to set matplotlib back end -------------------------------------
+        # Trying to set matplotlib back end ------------------------------------
         if self.matplotlib_backend:
             rootLogger.debug('Setting matplotlib back end to '+self.matplotlib_backend)
             import matplotlib
             matplotlib.use(self.matplotlib_backend)
 
         # Loading config -------------------------------------------------------
-        self.set_config(config, name=name, reuse=reuse)
+        self.set_config(config, name=name, reusefile=reusefile)
 
         # load a mdp net -------------------------------------------------------
         if loadnet:
-            rootLogger.warn('Loading mdp net %s into self.RESULT.NET', loadnet)
+            rootLogger.warn('Loading MDP net %s into self.result.NET', loadnet)
             import cPickle
             try:
-                self.RESULT.NET
-                pass # ok there is no NET already in the current RESULT
+                self.result.NET
+                pass # ok there is no NET already in the current result
             except KeyError as e:
-                rootLogger.warn('Overwriting RESULT.NET from loaded result file with the NET from %s',loadnet)
+                rootLogger.warn('Overwriting result.NET from loaded result file with the NET from %s',loadnet)
             with open(loadnet, 'rb') as f:
-                self.RESULT.NET = cPickle.load(f)
+                self.result.NET = cPickle.load(f)
 
 
         # A logger for the user ------------------------------------------------
-        self.log = logging.getLogger(self.CONFIG.NAME)
+        self.log = logging.getLogger(self.config.NAME)
 
         rootLogger.info('Experiment setup finished.')
         if self.interactive:
@@ -664,7 +590,7 @@ class Experiment(object):
                          'd'  ]#     diamond
         
         
-        # If positional __args were given, run the specified phases now:
+        # If positional __args were given, run the specified phases now --------
         if len(self.__args) > 0 :
             self.log.debug('Phases to run now (as given by command line): '+str(self.__args))
             self.run(phases=self.__args, force=True)
@@ -676,8 +602,42 @@ class Experiment(object):
             
     
     
-    def set_config(self, config, name='run', reuse=None):
+    def set_config(self, config=None, name='run', reusefile=None):
+        '''Set a config for this experiment.
+        
+        @param config: 
+            Can be a file path, a mappable (like dict) or None (an empty
+            configuration will be created.
+        @param name: 
+            A name you can assign for this experimental run. (default: 'run')
+            A directory in the current dir with this name will be created to
+            store the log and result files. Older files will not be overwritten.
+            
+        '''
         rootLogger = logging.getLogger()
+        # Print/log infos ------------------------------------------------------
+        welcome =('''
+================================================================================
+  %s
+  Experiment written by %s. (version %s)
+================================================================================''') % \
+        (str(self.greeting), str(self.author), get_version_string(self.version))
+        
+        rootLogger.info( welcome)
+        rootLogger.info( time.asctime()  )
+        try:
+            rootLogger.info( 'On %s', os.uname()[1] )
+            rootLogger.info( 'Architecture %s', os.uname()[-1] )
+        except:
+            pass
+        
+        if not self.interactive:
+            commandline = ""
+            for a in sys.argv:
+                commandline += ' ' + a
+            rootLogger.info( 'Command line args were: ' + commandline)
+            
+        # Loading/Setting config -----------------------------------------------
         if not config:
             rootLogger.info('No config specified. Creating an empty config obj.')
             self.config = Config()
@@ -689,21 +649,6 @@ class Experiment(object):
             if os.path.exists(config):
                 global_dict = {}
                 execfile(config, global_dict)
-                # todo: replace this by a cleaner imp.load_source() call:
-                #used_config = 'used_config_'+time_string()+'__'+str(time.time()).split('.')[-1]+'.py'
-                #backupFile(used_config) 
-                #shutil.copy(config, used_config)
-                #rootLogger.info('Copied config %s to %s', config, used_config)
-                #assert os.path.exists(os.curdir + os.sep + used_config)
-                #if used_config.endswith('.py'): 
-                #    configimport = used_config[:-3]
-                #else: 
-                #    configimport = used_config
-                #configdir = os.curdir
-                #rootLogger.info('Config: import "%s" from path %s', configimport, os.path.abspath(configdir))
-                #sys.path.insert(0, os.path.abspath(configdir)) # temporary add . to the pythonpath
-                #rootLogger.debug('Prepended %s to sys.path in order to import %s.', sys.path[0], used_config)
-                #self._config_module = __import__(configimport)
                 try:
                     # Is there an item named "config"
                     self.config = global_dict['config']
@@ -724,23 +669,41 @@ class Experiment(object):
             self.config.NAME = name
         elif not self.config.has_key('NAME'):
             self.config.NAME = name
+        self.config.NAME = self.config.NAME.replace(' ', '_')
+        self.config.NAME = self.config.NAME.replace('/', '_')
+        self.config.NAME = self.config.NAME.replace('\\', '_')
         self.unique_name = self.config['NAME'] + self.unique_ending
         self.config.UNIQUE_NAME = self.unique_name
-        self.CONFIG = self.config # just an alias
-        rootLogger.info('Using config file: %s',config)
 
-        # Init RESULT ----------------------------------------------------------
-        self.RESULT = Config()
+        # Creating dir for this experiment -------------------------------------
+        if not os.path.exists(os.curdir + os.sep + self.config.NAME):
+            os.mkdir(os.curdir + os.sep + self.config.NAME)
+            rootLogger.info('Output for this experiment is put into the new directory: \n\t"%s"', os.path.abspath(os.curdir+os.sep+self.config.NAME))
+        else:
+            rootLogger.info('Output for this experiment is put into the existing directory \n\t"%s".', os.path.abspath(os.curdir+os.sep+self.config.NAME))
+
+        # Adding logfile -------------------------------------------------------        
+        if self.__logfile:
+            self.__logfile = os.curdir + os.sep + self.config.NAME + os.sep + self.__logfile 
+            backupFile(self.__logfile, '.bak')
+            loggingFileHandler = logging.FileHandler( self.__logfile, mode='w' )
+            loggingFileHandler.setLevel( self.__fileloglevel )
+            loggingFileHandler.setFormatter(logging.Formatter('%(levelname)-7s %(name)10s: %(message)s'))
+            rootLogger.addHandler(loggingFileHandler)
+            rootLogger.info( 'logfile: ' + str(self.__logfile) )
+
+        # Init result ----------------------------------------------------------
+        self.result = Config()
 
         # REUSE ----------------------------------------------------------------
-        if not reuse and self.config.has_key('REUSE_FILE'):
-            reuse = self.config['REUSE_FILE']
-        if reuse:
-            self.config['REUSE_FILE'] = reuse
+        if not reusefile and self.config.has_key('REUSE_FILE'):
+            reusefile = self.config['REUSE_FILE']
+        if reusefile:
+            self.config['REUSE_FILE'] = reusefile
             rootLogger.warn('Reusing old results from %s', self.config.REUSE_FILE)
-            tmp = shelve.open(reuse)
+            tmp = shelve.open(reusefile)
             for k,v in tmp.items():
-                self.RESULT[k] = copy.deepcopy(v)
+                self.result[k] = copy.deepcopy(v)
                 rootLogger.debug('Reusing '+ k)
             tmp.close()
         else:
@@ -748,6 +711,7 @@ class Experiment(object):
     
         
     def _find_phase(self, phase):
+        '''Helper to find a phase by its (case insensitive) name.'''
         if isinstance(phase,str):
             #self.log.debug('   find_phase: Name of phase given as str (%s)...', phase)
             for p in self.phases:
@@ -796,23 +760,23 @@ class Experiment(object):
                 else:
                     try:
                         try:
-                            needsrun = P.needsrun(ex=self, config=self.CONFIG, result=self.RESULT)
+                            needsrun = P.needsrun(ex=self, config=self.config, result=self.result)
                         except TypeError: # call signature wrong 
                             needsrun = P.needsrun(self) # legacy mode
                     except KeyError, e:
                         needsrun = True
-                        self.log.debug('Need to run %s because an item was probably not found in ex.RESULTS. (KeyError in needsrun())', P)
+                        self.log.debug('Need to run %s because an item was probably not found in ex.resultS. (KeyError in needsrun())', P)
                 # "allowed" is stronger than "force"
                 try:
                     try:
-                        allowed = P.is_allowed_to_run(ex=self, config=self.CONFIG, result=self.RESULT)
+                        allowed = P.is_allowed_to_run(ex=self, config=self.config, result=self.result)
                     except TypeError:
                         allowed = P.is_allowed_to_run(self)
                 except KeyError, e:
-                    self.log.debug('Assuming to forbid run %s because an item was probably not found in ex.RESULTS. (KeyError in is_allowed_to_run().)', P)
+                    self.log.debug('Assuming to forbid run %s because an item was probably not found in ex.resultS. (KeyError in is_allowed_to_run().)', P)
                     allowed = False
                 if needsrun and allowed:
-                    P(ex=self, config=self.CONFIG, result=self.RESULT, **kwargs)
+                    P(ex=self, config=self.config, result=self.result, **kwargs)
                 elif not allowed:
                     self.log.error('The %s is not allowed to be run at this point.',P)
                 elif not needsrun:
@@ -847,19 +811,22 @@ class Experiment(object):
         self.log.info('All Finished.')
 
 
-    def save(self):
-        '''If self.saveresult, then writing the current state of self.RESULT to a shelve.'''
+    def save(self, protocol=2):
+        '''If self.saveresult, then writing the current state of self.result to a shelve.'''
         tic = time.time()
         if self.saveresult:
             if not self.resultfile and self.config.has_key('RESULT_FILE'):
-                self.resultfile = self.config['RESULT_FILE']
                 self.log.info('Using RESULT_FILE %s specified in the config.', self.resultfile)
             if self.resultfile:
-                self.config['RESULT_FILE'] = self.resultfile
+                self.config['RESULT_FILE'] =  self.resultfile
             else:
-                self.config['RESULT_FILE'] = self.config.NAME + self.unique_ending + ".RESULT"
+                self.config['RESULT_FILE'] =  os.curdir + os.sep + self.config.NAME + os.sep + timehost_string() + "_RESULT.shelve"
                 self.log.info('No --result FILE was specified and the config does not contain a RESULT_FILE entry, too.')
                 self.log.info('Creating a unique name for the result file.')
+            
+            #if not self.config['RESULT_FILE'].beginswith(self.config.NAME + os.sep):
+            #    self.config['RESULT_FILE'] = self.config.NAME + os.sep + self.config['RESULT_FILE']
+            
             if (os.path.exists(self.config['RESULT_FILE']) and
                 self.config.has_key('REUSE_FILE') and 
                 self.config['RESULT_FILE']==self.config['REUSE_FILE'] ):
@@ -868,8 +835,8 @@ class Experiment(object):
             backupFile(self.config['RESULT_FILE']+'.dir', ".old")
             backupFile(self.config['RESULT_FILE']+'.dat', ".old")
             backupFile(self.config['RESULT_FILE']+'.bak', ".old")
-            with closing( shelve.open(self.config['RESULT_FILE'], protocol=2) ) as res:
-                for k,v in self.RESULT.items():
+            with closing( shelve.open(self.config['RESULT_FILE'], protocol=protocol) ) as res:
+                for k,v in self.result.items():
                     try: # Todo: How to avoid that a NET which fails during train leads to TypeError here
                         res[k] = v 
                     except TypeError as e:
@@ -879,7 +846,7 @@ class Experiment(object):
             self.config.RESULT_FILE = None
             self.log.info('Not requested to save results. (--dontsaveresult)')
         tac = time.time()
-        self.log.debug('Saving RESULT file took %i seconds.', tac-tic)
+        self.log.debug('Saving result file took %i seconds.', tac-tic)
 
 
     def memory(self, pid=None):
@@ -901,7 +868,7 @@ class Experiment(object):
     def needs_training(self,net=None):
         '''The missing method to check whether a mdp network has finished training.'''
         if net is None:
-            net = self.RESULT.network
+            net = self.result.network
         for node in net:
             if node.is_trainable() and node.is_training():
                 return True # One Node is enough
@@ -922,7 +889,7 @@ class Experiment(object):
         with the loop_over variables as keyword args.
         
         @param net: 
-            The mdp flow to train. If None, self.RESULT.NET is used.
+            The mdp flow to train. If None, self.result.NET is used.
         @param num_batches: 
             A list with at least as many entries as len(net) with the number 
             of repetitions for each item in net.
@@ -951,7 +918,7 @@ class Experiment(object):
         import gc
         from mdp.utils import progressinfo
         if net is None:
-            net = self.RESULT.NET
+            net = self.result.NET
         assert len(num_batches) >= len(net), str(num_batches) + str(net)
         for i, node in enumerate(net):
             if node.is_trainable() and node.is_training():
@@ -994,17 +961,17 @@ class Experiment(object):
                     self.log.info('Dumping finished.')
                 except Exception:
                     self.log.exception('Failed to dump trained node. %s', node)
-                self.log.info('Assigning (partially) trained network to RESULT.NET...')
-                self.RESULT.NET = net
+                self.log.info('Assigning (partially) trained network to result.NET...')
+                self.result.NET = net
                 self.save()
             elif not node.is_trainable():
                 self.log.info('Skipping untrainable node: %s', node)
             elif not node.is_training():
                 self.log.info('Skipping already trained node: %s', node)
         self.log.info('Finished with all batches.')
-        #self.RESULT.TRAIN_LABELS = config.DS_train.get_labels()
-        self.log.info('Assigning fully trained network to RESULT.NET...')
-        self.RESULT.NET = net
+        #self.result.TRAIN_LABELS = config.DS_train.get_labels()
+        self.log.info('Assigning fully trained network to result.NET...')
+        self.result.NET = net
         return net
 
 
@@ -1207,7 +1174,7 @@ class TestExperiment(unittest.TestCase):
                 Phase.__init__(s)
                 s.run_counter = 0
             def run(s, ex, config, result):
-                ex.RESULT['bar'] = 'eggs'
+                ex.result['bar'] = 'eggs'
                 s.run_counter += 1
         class PhaseThatFails(Phase):
             def __init__(s):
@@ -1217,7 +1184,7 @@ class TestExperiment(unittest.TestCase):
                 s.run_counter += 1
                 raise Exception('boooom! This exception is thrown by intention to test the behavior of the run.')
         def phasefunction(ex):
-            ex.RESULT.laa = 'lilu'
+            ex.result.laa = 'lilu'
         
         self.TestPhase1 = TestPhase1
         self.AnotherTestPhase = AnotherTestPhase
@@ -1236,7 +1203,7 @@ class TestExperiment(unittest.TestCase):
         os.chdir(self.olddir)    
         shutil.rmtree('/tmp/test-experiments/', ignore_errors=True)
         
-
+    
     def test_version_tuple(self):    
         ex = Experiment(config=None,version=0)
         assert get_version_string(ex.version) == '0.0.0'
@@ -1265,37 +1232,40 @@ class TestExperiment(unittest.TestCase):
         
         
     def test_empty_experiment(self):
-        '''Empty experiment has a RESULT and log.'''
+        '''Empty experiment has a result and log.'''
         ex = Experiment(config=None)
         import collections
-        self.assertTrue( isinstance(ex.RESULT, collections.Mapping), 'An experiment should have a dict named RESULT.')
-        self.assertTrue( isinstance(ex.CONFIG, collections.Mapping), 'The CONFIG should be a Mapping.')
+        self.assertTrue( isinstance(ex.result, collections.Mapping), 'An experiment should have a dict named result.')
         self.assertTrue( isinstance(ex.config, collections.Mapping), 'The config should be a Mapping.')
-        self.assertTrue( ex.config is ex.CONFIG, 'config and CONFIG should be identical')
+        self.assertTrue( isinstance(ex.config, collections.Mapping), 'The config should be a Mapping.')
+        self.assertTrue( ex.config is ex.config, 'config and config should be identical')
         self.assertTrue( len(ex.config)==2, 'config should only have NAME and UNIQUE_NAME: '+repr(ex.config) )
+        assert ex.config.NAME =='run'
+        assert ex.config.UNIQUE_NAME
+        
         self.assertTrue( ex.unique_ending )
         ex.log.info('This should work.')
-        ex.RESULT.foo = 'spam'
-        ex.CONFIG.foo = 'spam'
+        ex.result.foo = 'spam'
+        ex.config.foo = 'spam'
         ex.showplots = False # avoid PLT.show()
         ex.run() 
         ex() # direct call of the object possible
         del ex # cleanup
     
-
+    
     def test_use_config_via_attributes(self):
         ex = Experiment(config=None)
-        ex.CONFIG.foo = 'bar'
-        assert ex.CONFIG.foo == 'bar'
-        ex.CONFIG.spam = 'eggs'
+        ex.config.foo = 'bar'
+        assert ex.config.foo == 'bar'
+        ex.config.spam = 'eggs'
         assert ex.config.spam == 'eggs'
-        ex.RESULT.res1 = 'ham'
-        assert ex.RESULT.res1 == 'ham'
-        assert ex.RESULT['res1'] == 'ham'
+        ex.result.res1 = 'ham'
+        assert ex.result.res1 == 'ham'
+        assert ex.result['res1'] == 'ham'
     
-
+    
     def test_reuse(self):
-        '''Does a "reuse"-file parameter actually fill the RESULT dict'''
+        '''Does a "reuse"-file parameter actually fill the result dict'''
         original_sysarg = copy.copy(sys.argv)
         path = '/tmp/test_reuse.shelve'
         backupFile(path)
@@ -1306,53 +1276,53 @@ class TestExperiment(unittest.TestCase):
         sh['b'] = b
         sh.close()
 
-        ex = Experiment(config=None, reuse=path)
-        self.assertTrue( ex.RESULT.has_key('b'))
-        self.assertEqual( ex.RESULT['a'], a)
+        ex = Experiment(config=None, reusefile=path)
+        self.assertTrue( ex.result.has_key('b'))
+        self.assertEqual( ex.result['a'], a)
         for i in range(len(b)):
-            self.assertEqual(b[i], ex.RESULT.b[i], 'b should be the same for item %s and %s' % (str(b[i]),str(ex.RESULT.b[i])) )
+            self.assertEqual(b[i], ex.result.b[i], 'b should be the same for item %s and %s' % (str(b[i]),str(ex.result.b[i])) )
         del ex
         
-        ex = Experiment(config=None, reuse=path, resultfile=path, saveresult=True)
-        self.assertTrue( ex.RESULT.has_key('b'))
-        self.assertEqual( ex.RESULT['a'], a)
+        ex = Experiment(config=None, reusefile=path, resultfile=path, saveresult=True)
+        self.assertTrue( ex.result.has_key('b'))
+        self.assertEqual( ex.result['a'], a)
         for i in range(len(b)):
-            self.assertEqual(b[i], ex.RESULT.b[i], 'b should be the same for item %s and %s' % (str(b[i]),str(ex.RESULT.b[i])) )
-        ex.RESULT.somethingnew = 'new'
+            self.assertEqual(b[i], ex.result.b[i], 'b should be the same for item %s and %s' % (str(b[i]),str(ex.result.b[i])) )
+        ex.result.somethingnew = 'new'
         ex.run() # will save the resultfile
         del ex
         
         ex = Experiment(config=dict(REUSE_FILE=path))
-        self.assertEqual( ex.RESULT.somethingnew, 'new') # should be here now, because in the last ex we safed the resultfile
-        self.assertTrue( ex.RESULT.has_key('b'))
-        self.assertEqual( ex.RESULT['a'], a)
+        self.assertEqual( ex.result.somethingnew, 'new') # should be here now, because in the last ex we safed the resultfile
+        self.assertTrue( ex.result.has_key('b'))
+        self.assertEqual( ex.result['a'], a)
         for i in range(len(b)):
-            self.assertEqual(b[i], ex.RESULT.b[i], 'b should be the same for item %s and %s' % (str(b[i]),str(ex.RESULT.b[i])) )
+            self.assertEqual(b[i], ex.result.b[i], 'b should be the same for item %s and %s' % (str(b[i]),str(ex.result.b[i])) )
         del ex
         
-        ex = Experiment(config=None, reuse=path, resultfile=path, saveresult=False)
-        self.assertTrue( ex.RESULT.has_key('b'))
-        self.assertEqual( ex.RESULT['a'], a)
+        ex = Experiment(config=None, reusefile=path, resultfile=path, saveresult=False)
+        self.assertTrue( ex.result.has_key('b'))
+        self.assertEqual( ex.result['a'], a)
         for i in range(len(b)):
-            self.assertEqual(b[i], ex.RESULT.b[i], 'b should be the same for item %s and %s' % (str(b[i]),str(ex.RESULT.b[i])) )
-        ex.RESULT.somethingnew2 = 'new2'
+            self.assertEqual(b[i], ex.result.b[i], 'b should be the same for item %s and %s' % (str(b[i]),str(ex.result.b[i])) )
+        ex.result.somethingnew2 = 'new2'
         ex.run() # will save the resultfile
         del ex
         
         sys.argv = ['ignoreme', '--reuse', path]
         print('sys.argv changed to', sys.argv)
         ex = Experiment(config=None, interactive=False)
-        self.assertEqual( ex.RESULT.somethingnew, 'new') # should be here now, because in the last ex we safed the resultfile
-        self.assertRaises( KeyError, lambda ex: ex.RESULT.somethingnew2, ex) # should be here now, because in the last ex we safed the resultfile
-        self.assertTrue( ex.RESULT.has_key('b'))
-        self.assertEqual( ex.RESULT['a'], a)
+        self.assertEqual( ex.result.somethingnew, 'new') # should be here now, because in the last ex we safed the resultfile
+        self.assertRaises( KeyError, lambda ex: ex.result.somethingnew2, ex) # should be here now, because in the last ex we safed the resultfile
+        self.assertTrue( ex.result.has_key('b'))
+        self.assertEqual( ex.result['a'], a)
         for i in range(len(b)):
-            self.assertEqual(b[i], ex.RESULT.b[i], 'b should be the same for item %s and %s' % (str(b[i]),str(ex.RESULT.b[i])) )
+            self.assertEqual(b[i], ex.result.b[i], 'b should be the same for item %s and %s' % (str(b[i]),str(ex.result.b[i])) )
         del ex
         os.remove(path)
         sys.argv = original_sysarg
         
-
+    
     def test_simple_experiment_and_phases(self):
         ex = Experiment(phases=(self.p1, self.p2, self.p3, self.p4, self.p5, self.p6), config=None)
         self.assertEqual(len(ex.phases),6, 'This experiment in this test should have 6 phases')
@@ -1381,14 +1351,13 @@ config.bar      = ['eggs','ham']
 ''')
         os.chdir('/tmp/test-run/')
         ex = Experiment(phases=None, config='/tmp/test-config/testconfig.py')
-        self.assertTrue(ex.CONFIG)
-        self.assertEqual(ex.CONFIG.seed, 123)
-        self.assertEqual(ex.CONFIG.foo, 'spam')
+        self.assertTrue(ex.config)
+        self.assertEqual(ex.config.seed, 123)
+        self.assertEqual(ex.config.foo, 'spam')
         os.chdir(oldpath)
         shutil.rmtree('/tmp/test-config/', ignore_errors=True)
         shutil.rmtree('/tmp/test-run/', ignore_errors=True)
         del ex
-
 
     @SkipTest
     def test_config_imports_other_config(self):
@@ -1420,24 +1389,24 @@ config.bar      = 'ham'
 ''')
         ex = Experiment(phases=None, config='config.py')
         self.assertFalse(os.path.exists('/tmp/test-run2/config.py.old'), 'config.py should NOT have been copied to /tmp/test-run2/config.py. And therefore here should not be a config.py.old!!')
-        self.assertTrue(ex.CONFIG)
-        self.assertEqual(ex.CONFIG.foo, 'spam')
-        self.assertEqual(ex.CONFIG.bar, 'ham') # should not be "eggs"
+        self.assertTrue(ex.config)
+        self.assertEqual(ex.config.foo, 'spam')
+        self.assertEqual(ex.config.bar, 'ham') # should not be "eggs"
         os.chdir(oldpath)
         shutil.rmtree('/tmp/test-config2/', ignore_errors=True)
         shutil.rmtree('/tmp/test-run2/', ignore_errors=True)
         del ex
     
-
+    
     def test_config_as_dict_given(self):
         d = dict(a=1,b='spam')
         ex = Experiment(config=d)
-        ex.CONFIG.a
-        assert ex.CONFIG.a == d['a']
-        assert ex.CONFIG.b == d['b']
+        ex.config.a
+        assert ex.config.a == d['a']
+        assert ex.config.b == d['b']
         del ex
     
-
+    
     def test_loadnet(self):
         # If this test reports: "error: db type could not be determined", you 
         # have python installed without gdbm support.
@@ -1449,24 +1418,24 @@ config.bar      = 'ham'
         net = mdp.nodes.PCANode(input_dim=2, output_dim=1) + mdp.nodes.HitParadeNode(n=3)
         net.save(path)
         ex = Experiment(config=None, loadnet=path, resultfile=path2)
-        ex.RESULT.NET # should be there now
-        assert type(ex.RESULT.NET[1]) == type(net[1]), 'RESULT.NET[1]='+str(ex.RESULT.NET[1])+' and net[1]=' + str(net[1]) + ' should be the same.'
-        assert len(ex.RESULT.NET) == len(net)
+        ex.result.NET # should be there now
+        assert type(ex.result.NET[1]) == type(net[1]), 'result.NET[1]='+str(ex.result.NET[1])+' and net[1]=' + str(net[1]) + ' should be the same.'
+        assert len(ex.result.NET) == len(net)
         ex.run() # triggers storing to resultfile
-        # still ex.RESULT.NET should be there
-        assert type(ex.RESULT.NET[1]) == type(net[1]), 'RESULT.NET[1]='+str(ex.RESULT.NET[1])+' and net[1]=' + str(net[1]) + ' should be the same.'
-        assert len(ex.RESULT.NET) == len(net)
+        # still ex.result.NET should be there
+        assert type(ex.result.NET[1]) == type(net[1]), 'result.NET[1]='+str(ex.result.NET[1])+' and net[1]=' + str(net[1]) + ' should be the same.'
+        assert len(ex.result.NET) == len(net)
         del ex
-        ex = Experiment(config=None, reuse=path2, loadnet=path)
-        assert type(ex.RESULT.NET[1]) == type(net[1]), 'RESULT.NET[1]='+str(ex.RESULT.NET[1])+' and net[1]=' + str(net[1]) + ' should be the same.'
-        assert len(ex.RESULT.NET) == len(net)
-        del ex.RESULT['NET']
+        ex = Experiment(config=None, reusefile=path2, loadnet=path)
+        assert type(ex.result.NET[1]) == type(net[1]), 'result.NET[1]='+str(ex.result.NET[1])+' and net[1]=' + str(net[1]) + ' should be the same.'
+        assert len(ex.result.NET) == len(net)
+        del ex.result['NET']
         ex.run() # now save without the NET
         del ex
         # but still the loadnet should load the net even if reuse has no NET
-        ex = Experiment(config=None, reuse=path2, loadnet=path)
-        assert type(ex.RESULT.NET[1]) == type(net[1]), 'RESULT.NET[1]='+str(ex.RESULT.NET[1])+' and net[1]=' + str(net[1]) + ' should be the same.'
-        assert len(ex.RESULT.NET) == len(net)
+        ex = Experiment(config=None, reusefile=path2, loadnet=path)
+        assert type(ex.result.NET[1]) == type(net[1]), 'result.NET[1]='+str(ex.result.NET[1])+' and net[1]=' + str(net[1]) + ' should be the same.'
+        assert len(ex.result.NET) == len(net)
         del ex
         os.remove(path)
         os.remove(path2)
@@ -1487,7 +1456,7 @@ config.bar      = 'ham'
 
 
     def test_run_phase_all(self):
-        ex = Experiment(phases=(self.TestPhase1(), self.AnotherTestPhase(), self.PhaseThatFails(), self.phasefunction), config=None)
+        ex = Experiment(greeting='test_run_phase_all', phases=(self.TestPhase1(), self.AnotherTestPhase(), self.PhaseThatFails(), self.phasefunction), config=None)
         ex.run() # implicit 'all'. Even if a phase fails this should be ok
         for p in ex.phases:
             print(type(p))
@@ -1507,7 +1476,7 @@ config.bar      = 'ham'
         self.assertRaises(ValueError, ex.run, '' ) 
         del ex
 
-    
+
     def test_run_phase_by_list_of_classnames(self):
         ex = Experiment(phases=(self.TestPhase1(), self.AnotherTestPhase(), self.PhaseThatFails()), config=None, stderrloglevel='DEBUG')
         assert len(ex.phases) == 3
@@ -1544,7 +1513,7 @@ config.bar      = 'ham'
                         config=None)
         ex.run()
         assert ex.config.RESULT_FILE == None
-        assert len(ex.RESULT) > 0, str(ex.RESULT) # even if the results should not be stored, there should be a RESULT object containing 'foo'. See SetUp()
+        assert len(ex.result) > 0, str(ex.result) # even if the results should not be stored, there should be a result object containing 'foo'. See SetUp()
         del ex
 
         ex = Experiment(saveresult=True, 

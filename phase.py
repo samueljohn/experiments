@@ -21,6 +21,7 @@ Define a phase in an experiment.
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
+from __future__ import print_function, division, absolute_import
 
 
 
@@ -59,9 +60,9 @@ class Phase(object):
     def run(self, ex=None, config=None, result=None, **kwargs):
         '''Run this phase. You will probably want to overwrite this method.'''
         try:
-            r = self.wrap_function(ex, config=config, result=result, **kwargs)
+            r = self.wrap_function(ex=ex, config=config, result=result, **kwargs)
         except TypeError:
-            r = self.wrap_function(ex, **kwargs)
+            r = self.wrap_function(ex=ex, **kwargs)
         if r is not None:
             result[self.name + "_result"] = r
         self.run_counter += 1
@@ -83,10 +84,7 @@ class Phase(object):
 
     def __call__(self, ex=None, config=None, result=None, **kwargs):
         '''Allow to call this object directly instead of run().'''
-        try:
-            return self.run(ex, config=config, result=result, **kwargs)
-        except TypeError:
-            return self.run(ex)
+        return self.run(ex=ex, config=config, result=result, **kwargs)
 
     
     def __str__(self):

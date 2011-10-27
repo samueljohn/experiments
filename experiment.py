@@ -85,6 +85,9 @@ you can overwrite some of the setting with another "config.py"
 '''
 
 from __future__ import print_function, division, absolute_import
+from experiments.phase import Phase
+from experiments.config import Config
+from experiments.loop_unroller import Unroller
 from contextlib import closing
 from subprocess import Popen, PIPE
 import collections
@@ -98,9 +101,6 @@ import sys
 import time
 import unittest
 import platform
-from loop_unroller import Unroller
-from phase import Phase
-from config import Config
 
 
 
@@ -513,64 +513,34 @@ class Experiment(object):
             self.__stderrloglevel = self.loglevels[self.__stderrloglevel]
         self.__stderrloglevel = int(self.__stderrloglevel)
 
-        enable_logging(loglevel=self.__loglevel)
-        rootLogger = logging.getLogger()
-        rootLogger.handlers[0].setLevel(self.__stderrloglevel)
-        
-        print('Global loglevel is', logging.getLevelName( rootLogger.level ) )
-
-        _level = self.__stderrloglevel
-        for k,v in self.loglevels.items():
-            if v == self.__stderrloglevel: _level = k
-        rootLogger.info('stderrloglevel is %s',_level)
-
-        # Populating self.phases -----------------------------------------------
-        if phases is None:
-            self.phases = []
-        else:
-            self.phases = []
-            for p in phases:
-                if inspect.isfunction(p):
-                    rootLogger.debug('   Phase %s was given as a function.', p)
-                    self.phases.append( Phase(wrap_function=p) )
-                elif inspect.isclass(p):
-                    rootLogger.debug('   Phase %s was given as a class.', p)
-                    self.phases.append( p() )
-                else:
-                    rootLogger.debug('   Phase %s was given as an instance', p)
-                    self.phases.append( p )
-        rootLogger.info('Available phases: ' + str(self.phases))
-
-        # Trying to set matplotlib back end ------------------------------------
-        if self.matplotlib_backend:
-            rootLogger.debug('Setting matplotlib back end to '+self.matplotlib_backend)
-            import matplotlib
-            matplotlib.use(self.matplotlib_backend)
-
         # Loading config -------------------------------------------------------
+        self.__raw_phases = phases
         self.set_config(config, name=name, reusefile=reusefile)
 
+        # A logger for the user ------------------------------------------------
+        self.log = logging.getLogger(self.config.NAME)
+        self.log.info('Experiment setup finished.')
+        #if self.interactive:
+        #    rootLogger.info(self.__doc__)
+        self.log.info('\n================================================================================\n\n\n')
+        
         # load a mdp net -------------------------------------------------------
         if loadnet:
-            rootLogger.warn('Loading MDP net %s into self.result.NET', loadnet)
+            self.log.warn('Loading MDP net %s into self.result.NET', loadnet)
             import cPickle
             try:
                 self.result.NET
                 pass # ok there is no NET already in the current result
             except KeyError as e:
-                rootLogger.warn('Overwriting result.NET from loaded result file with the NET from %s',loadnet)
+                self.log.warn('Overwriting result.NET from loaded result file with the NET from %s',loadnet)
             with open(loadnet, 'rb') as f:
                 self.result.NET = cPickle.load(f)
+        # Trying to set matplotlib back end ------------------------------------
+        if self.matplotlib_backend:
+            self.log.debug('Setting matplotlib back end to '+self.matplotlib_backend)
+            import matplotlib
+            matplotlib.use(self.matplotlib_backend)
 
-
-        # A logger for the user ------------------------------------------------
-        self.log = logging.getLogger(self.config.NAME)
-
-        rootLogger.info('Experiment setup finished.')
-        if self.interactive:
-            rootLogger.info(self.__doc__)
-        rootLogger.info('\n================================================================================\n\n\n')
-        
         # provide matplotlib compatible colors ---------------------------------
         self.colors = [ (40/255.,  91/255.,  1.      ),
                         (1.,       50/255.,  49/255. ),
@@ -614,29 +584,32 @@ class Experiment(object):
             store the log and result files. Older files will not be overwritten.
             
         '''
+        
         rootLogger = logging.getLogger()
-        # Print/log infos ------------------------------------------------------
-        welcome =('''
-================================================================================
-  %s
-  Experiment written by %s. (version %s)
-================================================================================''') % \
-        (str(self.greeting), str(self.author), get_version_string(self.version))
-        
-        rootLogger.info( welcome)
-        rootLogger.info( time.asctime()  )
-        try:
-            rootLogger.info( 'On %s', os.uname()[1] )
-            rootLogger.info( 'Architecture %s', os.uname()[-1] )
-        except:
-            pass
-        
-        if not self.interactive:
-            commandline = ""
-            for a in sys.argv:
-                commandline += ' ' + a
-            rootLogger.info( 'Command line args were: ' + commandline)
-            
+        rootLogger.handlers = []
+        enable_logging(loglevel=self.__loglevel)
+        rootLogger.handlers[-1].setLevel(self.__stderrloglevel)
+        print('Global loglevel is', logging.getLevelName( rootLogger.level ) )
+        sys.stdout.flush()
+        rootLogger.info('stderrloglevel is %s',logging.getLevelName(self.__stderrloglevel))
+
+        # Populating self.phases -----------------------------------------------
+        if self.__raw_phases is None:
+            self.phases = []
+        else:
+            self.phases = []
+            for p in self.__raw_phases:
+                if inspect.isfunction(p):
+                    rootLogger.debug('   Phase %s was given as a function.', p)
+                    self.phases.append( Phase(wrap_function=p) )
+                elif inspect.isclass(p):
+                    rootLogger.debug('   Phase %s was given as a class.', p)
+                    self.phases.append( p() )
+                else:
+                    rootLogger.debug('   Phase %s was given as an instance', p)
+                    self.phases.append( p )
+        rootLogger.info('Available phases: ' + str(self.phases))
+
         # Loading/Setting config -----------------------------------------------
         if not config:
             rootLogger.info('No config specified. Creating an empty config obj.')
@@ -678,19 +651,42 @@ class Experiment(object):
         # Creating dir for this experiment -------------------------------------
         if not os.path.exists(os.curdir + os.sep + self.config.NAME):
             os.mkdir(os.curdir + os.sep + self.config.NAME)
-            rootLogger.info('Output for this experiment is put into the new directory: \n\t"%s"', os.path.abspath(os.curdir+os.sep+self.config.NAME))
+            rootLogger.info('Output for this experiment is put into the new directory: \n\t\t"%s"', os.path.abspath(os.curdir+os.sep+self.config.NAME))
         else:
-            rootLogger.info('Output for this experiment is put into the existing directory \n\t"%s".', os.path.abspath(os.curdir+os.sep+self.config.NAME))
+            rootLogger.info('Output for this experiment is put into the existing directory \n\t\t"%s".', os.path.abspath(os.curdir+os.sep+self.config.NAME))
 
         # Adding logfile -------------------------------------------------------        
         if self.__logfile:
-            self.__logfile = os.curdir + os.sep + self.config.NAME + os.sep + self.__logfile 
-            backupFile(self.__logfile, '.bak')
-            loggingFileHandler = logging.FileHandler( self.__logfile, mode='w' )
+            logfile = os.curdir + os.sep + self.config.NAME + os.sep + self.__logfile 
+            backupFile(logfile, '.bak')
+            loggingFileHandler = logging.FileHandler( logfile, mode='w' )
             loggingFileHandler.setLevel( self.__fileloglevel )
             loggingFileHandler.setFormatter(logging.Formatter('%(levelname)-7s %(name)10s: %(message)s'))
+            enable_logging()
             rootLogger.addHandler(loggingFileHandler)
-            rootLogger.info( 'logfile: ' + str(self.__logfile) )
+            rootLogger.info( 'logfile: ' + str(logfile) )
+
+        # Print/log infos ------------------------------------------------------
+        welcome =('''
+================================================================================
+  %s
+  Experiment written by %s. (version %s)
+================================================================================''') % \
+        (str(self.greeting), str(self.author), get_version_string(self.version))
+        
+        rootLogger.info( welcome)
+        rootLogger.info( time.asctime()  )
+        try:
+            rootLogger.info( 'On %s', os.uname()[1] )
+            rootLogger.info( 'Architecture %s', os.uname()[-1] )
+        except:
+            pass
+        
+        if not self.interactive:
+            commandline = ""
+            for a in sys.argv:
+                commandline += ' ' + a
+            rootLogger.info( 'Command line args were: ' + commandline)
 
         # Init result ----------------------------------------------------------
         self.result = Config()
@@ -724,8 +720,8 @@ class Experiment(object):
         return None # no phase found
     
     
-    def __call__(self, **kws):
-        return self.run(**kws)
+    def __call__(self, *args, **kws):
+        return self.run(*args, **kws)
 
 
     def run(self, phases='all', stopOnException=False, force=False, nosave=False, **kwargs):
@@ -759,19 +755,16 @@ class Experiment(object):
                     self.log.info('Forced to run this phase (skipping needsrun() and is_allowed_to_run() check).')
                 else:
                     try:
-                        try:
-                            needsrun = P.needsrun(ex=self, config=self.config, result=self.result)
-                        except TypeError: # call signature wrong 
-                            needsrun = P.needsrun(self) # legacy mode
+                        needsrun = P.needsrun(ex=self, config=self.config, result=self.result)
                     except KeyError, e:
                         needsrun = True
-                        self.log.debug('Need to run %s because an item was probably not found in ex.resultS. (KeyError in needsrun())', P)
+                        self.log.debug('Need to run %s because an item was probably not found in ex.result. (KeyError in needsrun())', P)
+                    except AssertionError, e:
+                        needsrun = True
+                        self.log.debug('Need to run %s because of: %s', str(e))
                 # "allowed" is stronger than "force"
                 try:
-                    try:
-                        allowed = P.is_allowed_to_run(ex=self, config=self.config, result=self.result)
-                    except TypeError:
-                        allowed = P.is_allowed_to_run(self)
+                    allowed = P.is_allowed_to_run(ex=self, config=self.config, result=self.result)
                 except KeyError, e:
                     self.log.debug('Assuming to forbid run %s because an item was probably not found in ex.resultS. (KeyError in is_allowed_to_run().)', P)
                     allowed = False
@@ -811,12 +804,12 @@ class Experiment(object):
         self.log.info('All Finished.')
 
 
-    def save(self, protocol=2):
+    def save(self, protocol=None):
         '''If self.saveresult, then writing the current state of self.result to a shelve.'''
         tic = time.time()
         if self.saveresult:
-            if not self.resultfile and self.config.has_key('RESULT_FILE'):
-                self.log.info('Using RESULT_FILE %s specified in the config.', self.resultfile)
+            if self.resultfile is None and self.config.has_key('RESULT_FILE'):
+                self.log.info('Using RESULT_FILE "%s" specified in the config.', self.config.RESULT_FILE)
             if self.resultfile:
                 self.config['RESULT_FILE'] =  self.resultfile
             else:

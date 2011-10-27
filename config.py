@@ -79,9 +79,6 @@ class Config(dict):
             dict.__init__(self,d)
         
         if init_with_configfile:
-            # todo: use imp.load_source(name, pathname[, file]) instead
-            # of this oder hack with sys.path.insert and __import__
-            # that has problems if a module of the same name is already loaded.
             if configfile_relative_to:
                 path = os.path.dirname(os.path.abspath(configfile_relative_to))+\
                        os.sep+init_with_configfile
@@ -90,13 +87,9 @@ class Config(dict):
             dirname = os.path.dirname(path)
             if dirname == '': dirname = os.curdir
             filename = os.path.basename(path)
-            sys.path.insert(0,os.path.dirname(path))
-            if filename.endswith(".py"):
-                modulename = filename[:-3]  
-            config_module = __import__(modulename, globals=globals())
-            self.update( config_module.config )
-            #print ('now self', dir(self))    
-            sys.path.pop(0)
+            gl = {}
+            execfile(filename, globals=gl)
+            self.update( gl['config'] )
         
 
 

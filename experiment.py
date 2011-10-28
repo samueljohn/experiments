@@ -149,7 +149,7 @@ def enable_logging(loglevel=logging.INFO, stream=None):
     if len(rootLogger.handlers)==0:
         rootLogger.setLevel(loglevel)
         #rootLogger.handlers = []
-        loggingStderrHandler = logging.StreamHandler(stream=stream )
+        loggingStderrHandler = logging.StreamHandler(stream )
         #loggingStderrHandler.setLevel( loglevel )
         formatter = logging.Formatter('%(levelname)-7s %(name)10s: %(message)s')
         loggingStderrHandler.setFormatter(formatter)

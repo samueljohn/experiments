@@ -25,7 +25,7 @@ A Config object that is a dict but you can access and set items as properties.
 '''
 
 
-from __future__ import print_function, division, absolute_import
+#from __future__ import print_function, division, absolute_import
 import os
 import sys
 import unittest

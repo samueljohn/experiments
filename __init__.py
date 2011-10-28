@@ -21,12 +21,17 @@ Run computer simulation experiments and configure them.
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
-from __future__ import print_function, division, absolute_import
-from experiments.phase import Phase
-from experiments.experiment import ( Experiment, get_version_string,
+#from __future__ import print_function, division, absolute_import
+#from experiments.phase import Phase
+#from experiments.experiment import ( Experiment, get_version_string,
+#                                     timehost_string, host_string, time_string )
+#from experiments.config import Config
+from loop_unroller import Unroller
+from phase import Phase
+from experiment import ( Experiment, get_version_string,
                                      timehost_string, host_string, time_string )
-from experiments.config import Config
-from experiments.loop_unroller import Unroller
+from config import Config
+from loop_unroller import Unroller
 
 __version__ = '0.9.3'
 

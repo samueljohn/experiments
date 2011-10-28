@@ -84,10 +84,13 @@ you can overwrite some of the setting with another "config.py"
 @todo  Test and support to use custom options to the command line. (use argpase)
 '''
 
-from __future__ import print_function, division, absolute_import
-from experiments.phase import Phase
-from experiments.config import Config
-from experiments.loop_unroller import Unroller
+#from experiments.phase import Phase
+#from experiments.config import Config
+#from experiments.loop_unroller import Unroller
+from phase import Phase
+from config import Config
+from loop_unroller import Unroller
+
 from contextlib import closing
 from subprocess import Popen, PIPE
 import collections

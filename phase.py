@@ -22,7 +22,7 @@ Define a phase in an experiment.
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
 #from __future__ import print_function, division, absolute_import
-
+import inspect
 
 
 class Phase(object):
@@ -42,8 +42,11 @@ class Phase(object):
         if wrap_function is not None:
             self.wrap_function = wrap_function
             self._name = self.wrap_function.__name__
+            self.__doc__ = wrap_function.__doc__
+            self.has_wrap_function = True
         else:
             self.wrap_function = lambda ex: None # "do nothing" placeholder
+            self.has_wrap_function = False
         self.run_counter = 0
         if self.name in ('all', 'All', 'ALL'):
             raise ValueError('Name "all" not allowed for a subclass of Phase.')
@@ -59,10 +62,13 @@ class Phase(object):
             
     def run(self, ex=None, config=None, result=None, **kwargs):
         '''Run this phase. You will probably want to overwrite this method.'''
-        try:
+        if len(inspect.getargspec(self.wrap_function).args) >= 3:
             r = self.wrap_function(ex=ex, config=config, result=result, **kwargs)
-        except TypeError:
-            r = self.wrap_function(ex=ex, **kwargs)
+        else:
+            kwargs['ex'] = ex
+            kwargs['result'] = result
+            kwargs['config'] = config
+            r = self.wrap_function(**kwargs)
         if r is not None:
             result[self.name + "_result"] = r
         self.run_counter += 1
@@ -81,7 +87,7 @@ class Phase(object):
         '''
         return True
     
-
+    
     def __call__(self, ex=None, config=None, result=None, **kwargs):
         '''Allow to call this object directly instead of run().'''
         return self.run(ex=ex, config=config, result=result, **kwargs)
@@ -89,6 +95,6 @@ class Phase(object):
     
     def __str__(self):
         return self.name+'-phase'
-    
+    __repr__ = __str__
     
     

@@ -113,7 +113,7 @@ class Config(dict):
     def __repr__(self):
         '''Get string representation of this config object'''
         s  = (  [ "<Config: " ]
-              + ["\n   %s=%s"%(k,v)
+              + ["\n   %s=%s"%(k,repr(v))
                   for k,v in self.items() ]
               + [ " >" ] )
         return reduce(lambda a,b:a+b,s,"")

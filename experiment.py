@@ -76,6 +76,7 @@ you can overwrite some of the setting with another "config.py"
 @todo: Use the Buffer logging handler that stores pickeled versions of the
        LogRecords and also add some viewer tools that can display log messages
        with on-the-fly filtering (e.g. based on logger hierarchy)
+       Is there 
 @todo: Switch to python 2.7's argparse
 @todo: Python3 support
 @todo: Add a support function to copy some stuff (possibly over the network)
@@ -562,6 +563,15 @@ class Experiment(object):
                          'v',  #     triangle down
                          'd'  ]#     diamond
         
+        # Add phases as methods with the same name for easy interactive calling
+        for p in self.phases:
+            n = p.name.lower().strip()
+            if n in self.__dict__: continue
+            def tmp_fun():
+                return self.run(n)
+            tmp_fun.__doc__ = p.__doc__
+            self.__dict__[n] = tmp_fun
+            
         
         # If positional __args were given, run the specified phases now --------
         if len(self.__args) > 0 :
@@ -573,6 +583,14 @@ class Experiment(object):
         elif interactive:
             self.log.debug('Running no phases automatically. You have to call ex.run("name_of_phase").')
             
+            
+    def __str__(self):
+        try:
+            return '<Experiment ' + self.config.NAME + ': "' + self.greeting + '" with phases [' + ', '.join( str(p) for p in self.phases ) + ']>'
+        except:
+            return '<Experiment "' + self.greeting + '" yet without a config.>'
+    __repr__ = __str__
+    
     
     
     def set_config(self, config=None, name='run', reusefile=None):
@@ -716,17 +734,15 @@ class Experiment(object):
             for p in self.phases:
                 if p.name.lower().strip() == phase.lower().strip():
                     return p
-                if p.name.lower().strip()+'-phase' == phase.lower().strip()+'-phase':
+                if p.name.lower().strip()+'-phase' == phase.lower().strip():
                     return p
-        else:
-            raise ValueError('The arg phases to be run must be a list of strings.')
+        elif isinstance(phase,Phase):
+            for p in self.phases:
+                if phase is p:
+                    return p
         return None # no phase found
     
     
-    def __call__(self, *args, **kws):
-        return self.run(*args, **kws)
-
-
     def run(self, phases='all', stopOnException=False, force=False, nosave=False, **kwargs):
         '''Actually run this experiment or more precisely the phases.
 
@@ -736,9 +752,12 @@ class Experiment(object):
             Each phase to be run is a string
             with the name of a class (internally phases[i].__class__.__name__
             is used) or of a function from self.phases.'''
+        retval = []
         if phases == 'all':
             phases = [ str(p.name) for p in self.phases ]
         if isinstance(phases,str):
+            phases = [phases]
+        if isinstance(phases,Phase):
             phases = [phases]
         if len(phases) > 0:
             self.log.info('Requested to run phases: \n%s\n', phases)
@@ -750,7 +769,11 @@ class Experiment(object):
             P = self._find_phase(phase) # get Phase obj from str if in self.phases
             tic = time.time()
             self.log.info('Starting %s ...', P)
-            if P.__doc__:
+            if P.has_wrap_function:
+                try:
+                    self.log.info('  ' + P.wrap_function.__doc__)
+                except: pass
+            elif P.__doc__:
                 self.log.info('  ' + P.__doc__)
             try:
                 if force:
@@ -772,13 +795,13 @@ class Experiment(object):
                     self.log.debug('Assuming to forbid run %s because an item was probably not found in ex.resultS. (KeyError in is_allowed_to_run().)', P)
                     allowed = False
                 if needsrun and allowed:
-                    P(ex=self, config=self.config, result=self.result, **kwargs)
+                    retval.append(  P(ex=self, config=self.config, result=self.result, **kwargs) )
                 elif not allowed:
                     self.log.error('The %s is not allowed to be run at this point.',P)
                 elif not needsrun:
                     self.log.warn('%s needs not to be run. Using cached results.', P)
             except Exception, e:
-                self.log.exception('Exception in %s.', P)
+                self.log.exception('Exception in %s', P)
                 if stopOnException:
                     tac = time.time()
                     self.log.warn('ABORT: Breaking %s because stopOnException==True.', P, tac-tic)
@@ -793,11 +816,11 @@ class Experiment(object):
             self.save()
         if self.showplots:
             try:
-                import matplotlib.pyplot as PLT
+                import matplotlib.pyplot as plt
                 if self.interactive:
-                    PLT.draw()
+                    plt.draw()
                 else:
-                    PLT.show()
+                    plt.show()
             except AttributeError as ae:
                 self.log.debug('It seems as no plot has been drawn with matplotlib.')
             except UserWarning as uw:
@@ -805,7 +828,11 @@ class Experiment(object):
             except Exception as e:
                 self.log.exception('Exception in pylab.show()...')
         self.log.info('All Finished.')
-
+        if len(phases) == 1 and len(retval) == 1:
+            return retval[0]
+        else:
+            return retval
+    __call__ = run
 
     def save(self, protocol=None):
         '''If self.saveresult, then writing the current state of self.result to a shelve.'''
@@ -1179,8 +1206,8 @@ class TestExperiment(unittest.TestCase):
             def run(s, ex, config, result):
                 s.run_counter += 1
                 raise Exception('boooom! This exception is thrown by intention to test the behavior of the run.')
-        def phasefunction(ex):
-            ex.result.laa = 'lilu'
+        def phasefunction(**kws):
+            kws['ex'].result.laa = 'lilu'
         
         self.TestPhase1 = TestPhase1
         self.AnotherTestPhase = AnotherTestPhase

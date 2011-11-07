@@ -1,5 +1,5 @@
 '''
-Run computer simulation experiments and configure them.
+Run computer simulation experiments and configure them. The geek way.
 
 @copyright: 
     2009-2011, Samuel John
@@ -21,11 +21,13 @@ Run computer simulation experiments and configure them.
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 '''
+#future stuff not used because python 2.6 cannot handle the imports that way
 #from __future__ import print_function, division, absolute_import
 #from experiments.phase import Phase
 #from experiments.experiment import ( Experiment, get_version_string,
 #                                     timehost_string, host_string, time_string )
 #from experiments.config import Config
+
 from loop_unroller import Unroller
 from phase import Phase
 from experiment import ( Experiment, get_version_string,
@@ -33,7 +35,6 @@ from experiment import ( Experiment, get_version_string,
 from config import Config
 from loop_unroller import Unroller
 
-__version__ = '0.9.3'
+__version__ = '0.9.4'
 
-# todo: refactor experiments.py into separate files
-# todo: tests here
+# todo: all sub tests callable here? perhaps not needed due to py.test

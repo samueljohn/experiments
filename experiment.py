@@ -567,10 +567,17 @@ class Experiment(object):
         for p in self.phases:
             n = p.name.lower().strip()
             if n in self.__dict__: continue
-            def tmp_fun():
-                return self.run(n)
-            tmp_fun.__doc__ = p.__doc__
-            self.__dict__[n] = tmp_fun
+            
+            class Proxy(object):
+                def __init__(self, ex, name):
+                    self.__ex = ex
+                    self.__phase_name = name
+                def __call__(self,**kws):
+                    return self.__ex.run(self.__phase_name, **kws)
+
+            temp = Proxy(ex=self,name=n)
+            temp.__doc__ = p.__doc__
+            self.__dict__[n] = temp
             
         
         # If positional __args were given, run the specified phases now --------

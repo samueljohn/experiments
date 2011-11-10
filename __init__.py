@@ -29,12 +29,12 @@ Run computer simulation experiments and configure them. The geek way.
 #from experiments.config import Config
 
 from loop_unroller import Unroller
-from phase import Phase
+from phase import Phase, DependsOnAnotherPhase
 from experiment import ( Experiment, get_version_string,
                                      timehost_string, host_string, time_string )
 from config import Config
 from loop_unroller import Unroller
 
-__version__ = '0.9.4'
+__version__ = '0.9.5'
 
 # todo: all sub tests callable here? perhaps not needed due to py.test

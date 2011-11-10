@@ -88,7 +88,7 @@ you can overwrite some of the setting with another "config.py"
 #from experiments.phase import Phase
 #from experiments.config import Config
 #from experiments.loop_unroller import Unroller
-from phase import Phase
+from phase import Phase, DependsOnAnotherPhase
 from config import Config
 from loop_unroller import Unroller
 
@@ -767,7 +767,7 @@ class Experiment(object):
         if isinstance(phases,Phase):
             phases = [phases]
         if len(phases) > 0:
-            self.log.info('Requested to run phases: \n%s\n', phases)
+            self.log.info('Requested to run phases: \n%s', phases)
         for phase in phases:
             if self._find_phase(phase) is None:
                 raise ValueError('Phase %s not found. Available are %s' % (str(phase),str(self.phases)) )
@@ -799,10 +799,25 @@ class Experiment(object):
                 try:
                     allowed = P.is_allowed_to_run(ex=self, config=self.config, result=self.result)
                 except KeyError, e:
-                    self.log.debug('Assuming to forbid run %s because an item was probably not found in ex.resultS. (KeyError in is_allowed_to_run().)', P)
+                    self.log.debug('Assuming to forbid run %s because an item was probably not found in ex.result. (KeyError in is_allowed_to_run().)', P)
                     allowed = False
                 if needsrun and allowed:
-                    retval.append(  P(ex=self, config=self.config, result=self.result, **kwargs) )
+                    # A local function for the recursive running of dependencies in case of DependsOnAnotherPhase Exception                  
+                    def run_a_phase(the_phase, retval=[]):
+                        try:
+                            retval.append( the_phase(ex=self, config=self.config, result=self.result, **kwargs) )
+                        except DependsOnAnotherPhase, err:
+                            self.log.info('\n================================================================================')
+                            self.log.warn('The phase %s depends on %s. Now executing that one first...', P, err.depends_on)
+                            tic=time.time()
+                            run_a_phase(self._find_phase(err.depends_on))
+                            tac=time.time()
+                            self.log.info('Finished %s. Took %g seconds.', err.depends_on, tac-tic)
+                            self.log.info('\n================================================================================')
+                            self.log.info('And now trying to run %s again...', the_phase)
+                            retval.append(run_a_phase(the_phase))
+                    run_a_phase(P, retval)
+                           
                 elif not allowed:
                     self.log.error('The %s is not allowed to be run at this point.',P)
                 elif not needsrun:
@@ -835,10 +850,7 @@ class Experiment(object):
             except Exception as e:
                 self.log.exception('Exception in pylab.show()...')
         self.log.info('All Finished.')
-        if len(phases) == 1 and len(retval) == 1:
-            return retval[0]
-        else:
-            return retval
+        return retval
     __call__ = run
 
     def save(self, protocol=None):

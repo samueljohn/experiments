@@ -25,6 +25,15 @@ Define a phase in an experiment.
 import inspect
 
 
+class DependsOnAnotherPhase(Exception):
+    '''An exception that may be raised by a Phase to indicate that another
+    Phase should be run first. Usually, this would be something like
+    "train-phase" depends on "GenTrainData". The Experiment will attempt to
+    execute that phase and try again with the original phase to execute.'''
+    def __init__(self, name_of_phase_that_needs_to_be_run_first):
+        self.depends_on = name_of_phase_that_needs_to_be_run_first
+
+
 class Phase(object):
     '''A Phase is a step that is carried out for the experiment. Is has a 
     run() method, which is supposed to do the work and optionally a 

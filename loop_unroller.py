@@ -24,32 +24,36 @@ Created on Mar 25, 2011
    limitations under the License.
 '''
 #from __future__ import print_function, division, absolute_import
+from collections import OrderedDict
 
 class Unroller(object):
     '''
     Emulate nested for-loops.
     @param  loops: 
-        loops is a list with a tuple of the variable name and an Iterable to 
+        loops is a dict (or collections.OrderedDict) list with a tuple of the variable name and an Iterable to 
         loop over.
     @param log: 
         An optional logger that can be used to print the variable and value
         for each step in the loop.
     
-    Usage: for ns,vs in unroller( [ ('x',range(1)), ('y',range(2)), ('z',range(2)) ] ): 
-              print ns, vs   
-      out: ['x', 'y', 'z'] [0, 0, 0]
-           ['x', 'y', 'z'] [0, 0, 1]
-           ['x', 'y', 'z'] [0, 1, 0]
-           ['x', 'y', 'z'] [0, 1, 1]
+    Usage: for d in Unroller( collections.OrderedDict(  [('x',range(1)), 
+                                                         ('y',[0,1]), 
+                                                         ('z',range(2))] )): 
+              print d #is like a dict
+              my_fun( **d ) # call a function
+              
+      out: OrderedDict( [('x', 0), ('y', 0), ('z', 0)] ) 
+           OrderedDict( [('x', 0), ('y', 0), ('z', 1)] )   
+           OrderedDict( [('x', 0), ('y', 1), ('z', 0)] )   
+           OrderedDict( [('x', 0), ('y', 1), ('z', 1)] )     
     '''
         
     def __init__(self, loops, log=None):
         self.loops = loops
         self.log = log
         self.total = 1
-        for l in loops:
-            if len(l)==3: self.total *= l[2] # len is explicitly given as third tuple element
-            else: self.total *= len(l[1])
+        for l in loops.items():
+            self.total *= len(l[1])
         if self.log:
             self.log.info('Iterating over %i items.', self.total)    
             
@@ -65,7 +69,7 @@ class Unroller(object):
         loop_vars = []
         loop_vals = []
         loop_iter = []
-        loops = self.loops
+        loops = self.loops.items()
         for loop in loops:
             loop_vars.append(loop[0])
             loop_iter.append(iter(loop[1]))
@@ -78,7 +82,7 @@ class Unroller(object):
                 self.log.info('%s%s = %s: ...', sp, loop_vars[cur], loop_vals[cur])
 
         
-        yield loop_vars, loop_vals
+        yield OrderedDict( zip(loop_vars, loop_vals))
         last = cur
         while cur >= 0:
             #print ('main: cur=', cur)
@@ -111,7 +115,7 @@ class Unroller(object):
             if self.log: 
                 sp = '  ' * cur
                 self.log.info('%s%s = %s: ...', sp, loop_vars[cur], loop_vals[cur])
-            yield loop_vars[:], loop_vals[:]
+            yield OrderedDict( zip(loop_vars[:], loop_vals[:]) )
             
 
 import unittest
@@ -125,11 +129,10 @@ class Test_Unroller(unittest.TestCase):
     
     def test_1_loop(self):
         import logging
-        r = Unroller(loops=[('i',xrange(11))], log=logging.getLogger('Unroller'))
         j = 0
-        for vars, vals in r:
-            self.assertEqual( vars[0], 'i')
-            self.assertEqual( j, vals[0] )
+        for d in Unroller(dict(i=xrange(11)), log=logging.getLogger('Unroller')):
+            assert d.has_key('i')
+            assert d['i'] == j
             j += 1
         self.assertTrue(j==11, 'j=%i but should be 10' %j)
             

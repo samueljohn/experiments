@@ -81,8 +81,7 @@ class Unroller(object):
                 sp = '  ' * cur
                 self.log.info('%s%s = %s: ...', sp, loop_vars[cur], loop_vals[cur])
 
-        
-        yield OrderedDict( zip(loop_vars, loop_vals))
+        yield OrderedDict( zip(loop_vars, loop_vals) )
         last = cur
         while cur >= 0:
             #print ('main: cur=', cur)
@@ -115,7 +114,7 @@ class Unroller(object):
             if self.log: 
                 sp = '  ' * cur
                 self.log.info('%s%s = %s: ...', sp, loop_vars[cur], loop_vals[cur])
-            yield OrderedDict( zip(loop_vars[:], loop_vals[:]) )
+            yield OrderedDict( zip(loop_vars, loop_vals[:]) )
             
 
 import unittest
@@ -139,9 +138,11 @@ class Test_Unroller(unittest.TestCase):
     
     def test_0_loop(self):
         import logging
-        r = Unroller(loops=[('i',[])], log=logging.getLogger('Unroller'))
+        r = Unroller(loops=dict(i=[]), log=logging.getLogger('Unroller'))
         j = 0
-        for vars, vals in r:
+        for d in r:
+            vars = d.keys()
+            vals = d.values()
             self.assertEqual( vars[0], 'i')
             self.assertEqual( j, vals[0] )
             j += 1
@@ -150,12 +151,14 @@ class Test_Unroller(unittest.TestCase):
            
     def test_3_loops(self): 
         import logging
-        r = Unroller(loops=[('i',range(2)),('j',xrange(3)),('k',range(2))], log=logging.getLogger('Unroller'))
+        r = Unroller(loops=OrderedDict([('i',range(2)),('j',xrange(3)),('k',range(2))]), log=logging.getLogger('Unroller'))
         expected = [[0,0,0],[0,0,1],[0,1,0],[0,1,1],[0,2,0],[0,2,1],[1,0,0],[1,0,1],[1,1,0],[1,1,1],[1,2,0],[1,2,1]]
         vals = []
         count = 0 
         self.assertTrue(len(expected)==len(r), '%i != %i' % (len(expected), len(r)))
-        for vars, vs in r:
+        for d in r:
+            vars = d.keys()
+            vs =  d.values()
             self.assertEqual( vars[0], 'i', vars)
             self.assertEqual( vars[1], 'j', vars)
             self.assertEqual( vars[2], 'k', vars)

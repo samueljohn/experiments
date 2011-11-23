@@ -35,6 +35,6 @@ from experiment import ( Experiment, get_version_string,
 from config import Config
 from loop_unroller import Unroller
 
-__version__ = '0.9.5'
+__version__ = '0.9.6'
 
 # todo: all sub tests callable here? perhaps not needed due to py.test

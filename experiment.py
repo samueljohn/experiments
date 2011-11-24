@@ -883,6 +883,8 @@ class Experiment(object):
                         res[k] = v 
                     except TypeError as e:
                         self.log.error('Cannot save %s (%s) to result file.', str(k), str(v))
+                    except RuntimeError as e:
+                        self.log.error('Cannot save %s (%s) to result file.', str(k), str(v))
             self.log.warn('==> Saving new results to %s', self.config.RESULT_FILE)
         else:
             self.config.RESULT_FILE = None

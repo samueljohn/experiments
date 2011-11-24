@@ -617,7 +617,8 @@ class Experiment(object):
         rootLogger.handlers = []
         enable_logging(loglevel=self.__loglevel)
         rootLogger.handlers[-1].setLevel(self.__stderrloglevel)
-        print('Global loglevel is', logging.getLevelName( rootLogger.level ) )
+        rootLogger.info('set_config():')
+        #print('Global loglevel is', logging.getLevelName( rootLogger.level ) )
         sys.stdout.flush()
         rootLogger.info('stderrloglevel is %s',logging.getLevelName(self.__stderrloglevel))
 

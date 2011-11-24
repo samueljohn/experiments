@@ -97,6 +97,7 @@ class Config(dict):
 
     def __setattr__(self,n,v):
         self[n] = v
+        self.__dict__[n] = v # to allow ipython tab completion
 
 
     def __getattr__(self,n):
@@ -105,6 +106,7 @@ class Config(dict):
 
     def __delattr__(self,n):
         del self[n]
+        del self.__dict__[n]
 
 
     def __getstate__(self):

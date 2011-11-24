@@ -52,8 +52,9 @@ class Config(dict):
     '''
 
     def __init__(self, d=None, 
-                 init_with_configfile=None, 
-                 configfile_relative_to=None ):
+                 init_with_configfile=None,
+                 configfile_relative_to=None,
+                 **kws ):
         '''Create a new Config instance.
         
         @param d: 
@@ -77,6 +78,7 @@ class Config(dict):
             dict.__init__(self)
         else:
             dict.__init__(self,d)
+        self.update(kws)
         
         if init_with_configfile:
             if configfile_relative_to:

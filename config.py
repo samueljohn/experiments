@@ -38,7 +38,7 @@ class Config(collections.OrderedDict):
     Basically, you can assign and get keys like attributes a la JavaScript:
     ```
        conf = Config()
-       conf.spam = 'eggs'      # Assignsment equivalent of conf['spam'] = 'eggs'
+       conf.spam = 'eggs'      # Assignment equivalent of conf['spam'] = 'eggs'
        print( conf.a )         # Access items via properties 
     ```
        

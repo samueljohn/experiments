@@ -793,6 +793,9 @@ class Experiment(object):
                     except KeyError, e:
                         needsrun = True
                         self.log.debug('Need to run %s because an item was probably not found in ex.result. (KeyError in needsrun())', P)
+                    except AttributeError, e:    
+                        needsrun = True
+                        self.log.debug('Need to run %s because an item was probably not found in ex.result. (KeyError in needsrun())', P)
                     except AssertionError, e:
                         needsrun = True
                         self.log.debug('Need to run %s because of: %s', str(e))

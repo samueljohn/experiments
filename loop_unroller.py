@@ -24,7 +24,7 @@ Created on Mar 25, 2011
    limitations under the License.
 '''
 #from __future__ import print_function, division, absolute_import
-from collections import OrderedDict
+#from collections import OrderedDict # only python 2.7
 from config import Config
 
 class Unroller(object):
@@ -38,17 +38,17 @@ class Unroller(object):
         for each step in the loop.
         For example: log=logging.getLogger('mylogger')
     
-    Usage: for d in Unroller( collections.OrderedDict(  [('x',range(1)), 
+    Usage: for d in Unroller( collections.dict(  [('x',range(1)), 
                                                          ('y',[0,1]), 
                                                          ('z',range(2))] )): 
               print d #is like a dict
               my_fun( **d ) # call a function
               
-      out: OrderedDict( [('x', 0), ('y', 0), ('z', 0)] ) 
-           OrderedDict( [('x', 0), ('y', 0), ('z', 1)] )   
-           OrderedDict( [('x', 0), ('y', 1), ('z', 0)] )   
-           OrderedDict( [('x', 0), ('y', 1), ('z', 1)] )     
     '''
+#    out: OrderedDict( [('x', 0), ('y', 0), ('z', 0)] ) 
+#         OrderedDict( [('x', 0), ('y', 0), ('z', 1)] )   
+#         OrderedDict( [('x', 0), ('y', 1), ('z', 0)] )   
+#         OrderedDict( [('x', 0), ('y', 1), ('z', 1)] )     
         
     def __init__(self, loops, log=None):
         self.loops = loops
@@ -153,7 +153,7 @@ class Test_Unroller(unittest.TestCase):
            
     def test_3_loops(self): 
         import logging
-        r = Unroller(loops=OrderedDict([('i',range(2)),('j',xrange(3)),('k',range(2))]), log=logging.getLogger('Unroller'))
+        r = Unroller(loops=dict([('i',range(2)),('j',xrange(3)),('k',range(2))]), log=logging.getLogger('Unroller'))
         expected = [[0,0,0],[0,0,1],[0,1,0],[0,1,1],[0,2,0],[0,2,1],[1,0,0],[1,0,1],[1,1,0],[1,1,1],[1,2,0],[1,2,1]]
         vals = []
         count = 0 

@@ -32,8 +32,9 @@ import collections
 import logging
 
 
-class Config(collections.OrderedDict):
-    '''An intermezzo between a Python OrderedDict and an object.
+#class Config(collections.OrderedDict):
+class Config(dict):
+    '''An intermezzo between a Python dict and an object.
     
     Basically, you can assign and get keys like attributes a la JavaScript:
     ```
@@ -160,11 +161,11 @@ class TestConfig(unittest.TestCase):
         c = Config()
         del c
 
-    def test_type(self):
-        'Config should be an instance of collections.OrderedDict'
-        c = Config()
-        assert isinstance(c,collections.OrderedDict) 
-    
+#    def test_type(self):
+#        'Config should be an instance of collections.OrderedDict'
+#        c = Config()
+#        assert isinstance(c,collections.OrderedDict) 
+#    
     
     def test_del_attr_and_del_as_dict_item(self):
         'del c.spam and del c["spam"]'

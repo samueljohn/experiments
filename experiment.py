@@ -837,6 +837,7 @@ class Experiment(object):
                 self.log.exception('Exception in %s', P)
                 if stopOnException:
                     tac = time.time()
+                    self.log.info(str(e))
                     self.log.warn('ABORT: Breaking %s because stopOnException==True.', P, tac-tic)
                     self.log.info('\n================================================================================\n\n\n')
                     break # but still write the results

@@ -481,7 +481,7 @@ class Experiment(object):
             self.matplotlib_backend = self.__options.matplotlib_backend
             if self.__options.listphases:
                 print ('Available Phases:\n  ' +
-                                        '\n  '.join(str(p) for p in phases) +'\n' )
+                                        '\n  '.join(str(p) + ('\n    "' + p.__doc__ +'"' if p.__doc__ else '') for p in phases) +'\n' )
                 exit(0)
         else:
             # interactive mode -------------------------------------------------
@@ -637,7 +637,10 @@ class Experiment(object):
                 else:
                     rootLogger.debug('   Phase %s was given as an instance', p)
                     self.phases.append( p )
-        rootLogger.info('Available phases: ' + str(self.phases))
+        
+        if config is not None: # makes only sense to show this if a config is loaded
+            rootLogger.info('Available phases: \n' + 
+                        '\n  '.join(str(p) + ('\n    "' + p.__doc__ +'"\n' if p.__doc__ else '') for p in self.phases) +'\n' )
 
         # Loading/Setting config -----------------------------------------------
         if not config:

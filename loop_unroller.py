@@ -25,6 +25,7 @@ Created on Mar 25, 2011
 '''
 #from __future__ import print_function, division, absolute_import
 from collections import OrderedDict
+from config import Config
 
 class Unroller(object):
     '''
@@ -35,6 +36,7 @@ class Unroller(object):
     @param log: 
         An optional logger that can be used to print the variable and value
         for each step in the loop.
+        For example: log=logging.getLogger('mylogger')
     
     Usage: for d in Unroller( collections.OrderedDict(  [('x',range(1)), 
                                                          ('y',[0,1]), 
@@ -81,7 +83,7 @@ class Unroller(object):
                 sp = '  ' * cur
                 self.log.info('%s%s = %s: ...', sp, loop_vars[cur], loop_vals[cur])
 
-        yield OrderedDict( zip(loop_vars, loop_vals) )
+        yield Config( zip(loop_vars, loop_vals) )
         last = cur
         while cur >= 0:
             #print ('main: cur=', cur)
@@ -114,7 +116,7 @@ class Unroller(object):
             if self.log: 
                 sp = '  ' * cur
                 self.log.info('%s%s = %s: ...', sp, loop_vars[cur], loop_vals[cur])
-            yield OrderedDict( zip(loop_vars, loop_vals[:]) )
+            yield Config( zip(loop_vars, loop_vals[:]) )
             
 
 import unittest

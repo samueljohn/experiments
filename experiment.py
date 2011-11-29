@@ -294,11 +294,11 @@ class Experiment(object):
 
 
         '''
-        self.unique_ending = "_"+timehost_string()
+        self.unique_ending = timehost_string()
         self.loglevels = {'critical':50, 'error':40, 'warning':30, 'warn':30, 'info':20,
                        'debug':10, 'all':0, 'notset':0        }
         if logfile is True:
-            logfile = timehost_string()+".log"
+            logfile = unique_ending + ".log"
         self.version = version
         if author is None:
             try:
@@ -617,7 +617,7 @@ class Experiment(object):
         rootLogger.handlers = []
         enable_logging(loglevel=self.__loglevel)
         rootLogger.handlers[-1].setLevel(self.__stderrloglevel)
-        rootLogger.info('set_config():')
+        rootLogger.info('set_config(config=%s):',str(config))
         #print('Global loglevel is', logging.getLevelName( rootLogger.level ) )
         sys.stdout.flush()
         rootLogger.info('stderrloglevel is %s',logging.getLevelName(self.__stderrloglevel))
@@ -674,7 +674,7 @@ class Experiment(object):
         self.config.NAME = self.config.NAME.replace(' ', '_')
         self.config.NAME = self.config.NAME.replace('/', '_')
         self.config.NAME = self.config.NAME.replace('\\', '_')
-        self.unique_name = self.config['NAME'] + self.unique_ending
+        self.unique_name = self.config['NAME'] + "_" + self.unique_ending
         self.config.UNIQUE_NAME = self.unique_name
 
         # Creating dir for this experiment -------------------------------------
@@ -866,7 +866,7 @@ class Experiment(object):
             if self.resultfile:
                 self.config['RESULT_FILE'] =  self.resultfile
             else:
-                self.config['RESULT_FILE'] =  os.curdir + os.sep + self.config.NAME + os.sep + timehost_string() + "_RESULT.shelve"
+                self.config['RESULT_FILE'] =  os.curdir + os.sep + self.config.NAME + os.sep + self.unique_ending() + "_RESULT.shelve"
                 self.log.info('No --result FILE was specified and the config does not contain a RESULT_FILE entry, too.')
                 self.log.info('Creating a unique name for the result file.')
             

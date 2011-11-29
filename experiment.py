@@ -298,7 +298,7 @@ class Experiment(object):
         self.loglevels = {'critical':50, 'error':40, 'warning':30, 'warn':30, 'info':20,
                        'debug':10, 'all':0, 'notset':0        }
         if logfile is True:
-            logfile = unique_ending + ".log"
+            logfile = self.unique_ending + ".log"
         self.version = version
         if author is None:
             try:
@@ -738,8 +738,8 @@ class Experiment(object):
             rootLogger.debug('Not reusing old results.')
 
         # SAVE (almost empty result to have the result.config stored) ----------
-        sefl.result.config = copy.deepcopy(self.config)
-        self.save()
+        self.result.config = copy.deepcopy(self.config)
+        #self.save()
 
         
     def _find_phase(self, phase):
@@ -875,7 +875,7 @@ class Experiment(object):
             if self.resultfile:
                 self.config['RESULT_FILE'] =  self.resultfile
             else:
-                self.config['RESULT_FILE'] =  os.curdir + os.sep + self.config.NAME + os.sep + self.unique_ending() + "_RESULT.shelve"
+                self.config['RESULT_FILE'] =  os.curdir + os.sep + self.config.NAME + os.sep + self.unique_ending + "_RESULT.shelve"
                 self.log.info('No --result FILE was specified and the config does not contain a RESULT_FILE entry, too.')
                 self.log.info('Creating a unique name for the result file.')
             

@@ -643,8 +643,8 @@ class Experiment(object):
                         '\n  '.join(str(p) + ('\n    "' + p.__doc__ +'"\n' if p.__doc__ else '') for p in self.phases) +'\n' )
 
         # Loading/Setting config -----------------------------------------------
-        if not config:
-            rootLogger.info('No config specified. Creating an empty config obj.')
+        if config is None:
+            rootLogger.info('No config specified. Creating an empty config obj. You may want to call ex.set_config("path_to_config.py")')
             self.config = Config()
         elif isinstance(config, collections.Mapping):
             self.config = Config(config)
@@ -859,6 +859,7 @@ class Experiment(object):
         self.log.info('All Finished.')
         return retval
     __call__ = run
+
 
     def save(self, protocol=None):
         '''If self.saveresult, then writing the current state of self.result to a shelve.'''

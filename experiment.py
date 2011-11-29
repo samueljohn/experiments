@@ -833,15 +833,15 @@ class Experiment(object):
                     self.log.error('The %s is not allowed to be run at this point.',P)
                 elif not needsrun:
                     self.log.warn('%s needs not to be run. Using cached results.', P)
-            except Exception, e:
+            except BaseException, e:
                 self.log.exception('Exception in %s', P)
                 if stopOnException:
                     tac = time.time()
                     self.log.warn('ABORT: Breaking %s because stopOnException==True.', P, tac-tic)
                     self.log.info('\n================================================================================\n\n\n')
                     break # but still write the results
-                #else:
-                #    self.log.exception('Continuing and ignoring this Exception: ' + str(e))
+                else:
+                    self.log.exception('Continuing with next phase and ignoring this Exception: ' + str(e))
             tac = time.time()
             self.log.info('Finished %s. Took %g seconds.', P, tac-tic)
             self.log.info('\n================================================================================\n\n\n')

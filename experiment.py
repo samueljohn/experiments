@@ -736,7 +736,11 @@ class Experiment(object):
             tmp.close()
         else:
             rootLogger.debug('Not reusing old results.')
-    
+
+        # SAVE (almost empty result to have the result.config stored) ----------
+        sefl.result.config = copy.deepcopy(self.config)
+        self.save()
+
         
     def _find_phase(self, phase):
         '''Helper to find a phase by its (case insensitive) name.'''

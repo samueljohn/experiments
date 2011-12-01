@@ -119,7 +119,7 @@ class Config(collections.OrderedDict):
             return self[n]
         else:
             # Default behaviour
-            raise AttributeError            
+            raise AttributeError(n)           
     
     def __delattr__(self,n):
         if not n.startswith('_'):

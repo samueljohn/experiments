@@ -518,6 +518,8 @@ class Experiment(object):
         self.__stderrloglevel = int(self.__stderrloglevel)
 
         # Loading config -------------------------------------------------------
+        print 'Setting up experiment...'
+        sys.stdout.flush()
         self.__raw_phases = phases
         self.set_config(config, name=name, reusefile=reusefile)
 
@@ -535,7 +537,7 @@ class Experiment(object):
             try:
                 self.result.NET
                 pass # ok there is no NET already in the current result
-            except KeyError as e:
+            except (KeyError,AttributeError) as e:
                 self.log.warn('Overwriting result.NET from loaded result file with the NET from %s',loadnet)
             with open(loadnet, 'rb') as f:
                 self.result.NET = cPickle.load(f)
@@ -819,7 +821,7 @@ class Experiment(object):
                             retval.append( the_phase(ex=self, config=self.config, result=self.result, **kwargs) )
                         except DependsOnAnotherPhase, err:
                             self.log.info('\n================================================================================')
-                            self.log.warn('The phase %s depends on %s. Now executing that one first...', P, err.depends_on)
+                            self.log.info('The phase %s depends on %s. Now executing that one first...', P, err.depends_on)
                             tic=time.time()
                             run_a_phase(self._find_phase(err.depends_on))
                             tac=time.time()
@@ -1370,7 +1372,7 @@ class TestExperiment(unittest.TestCase):
         print('sys.argv changed to', sys.argv)
         ex = Experiment(config=None, interactive=False)
         self.assertEqual( ex.result.somethingnew, 'new') # should be here now, because in the last ex we safed the resultfile
-        self.assertRaises( KeyError, lambda ex: ex.result.somethingnew2, ex) # should be here now, because in the last ex we safed the resultfile
+        self.assertRaises( AttributeError, lambda ex: ex.result.somethingnew2, ex) # should be here now, because in the last ex we safed the resultfile
         self.assertTrue( ex.result.has_key('b'))
         self.assertEqual( ex.result['a'], a)
         for i in range(len(b)):

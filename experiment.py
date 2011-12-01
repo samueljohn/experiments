@@ -726,23 +726,35 @@ class Experiment(object):
         self.result = Config()
 
         # REUSE ----------------------------------------------------------------
+        self.reuse(reusefile)
+
+        # SAVE (almost empty result to have the result.config stored) ----------
+        self.result.config = copy.deepcopy(self.config)
+        rootLogger.info('Storing the current cofing to result.config.')
+
+
+    def reuse(self, reusefile):
+        '''Loading and re-using an old result file.'''    
+        logger = logging.getLogger('reuse')
         if not reusefile and self.config.has_key('REUSE_FILE'):
             reusefile = self.config['REUSE_FILE']
         if reusefile:
             self.config['REUSE_FILE'] = reusefile
-            rootLogger.warn('Reusing old results from %s', self.config.REUSE_FILE)
-            tmp = shelve.open(reusefile)
-            for k,v in tmp.items():
-                self.result[k] = copy.deepcopy(v)
-                rootLogger.debug('Reusing '+ k)
-            tmp.close()
+            logger.warn('Reusing old results from %s', self.config.REUSE_FILE)
+            if not os.path.exists(reusefile):
+                raise ValueError('File "%s" does not exist.', reusefile)
+            try:
+                tmp = shelve.open(reusefile)
+                for k,v in tmp.items():
+                    self.result[k] = copy.deepcopy(v)
+                    logger.debug('Reusing '+ k)
+            except Exception as e:
+                logger.exception('Failed using old result file.')
+            finally:
+                tmp.close()
         else:
-            rootLogger.debug('Not reusing old results.')
-
-        # SAVE (almost empty result to have the result.config stored) ----------
-        self.result.config = copy.deepcopy(self.config)
-        #self.save()
-
+            logger.debug('Not reusing old results.')
+        
         
     def _find_phase(self, phase):
         '''Helper to find a phase by its (case insensitive) name.'''
@@ -816,20 +828,20 @@ class Experiment(object):
                     allowed = False
                 if needsrun and allowed:
                     # A local function for the recursive running of dependencies in case of DependsOnAnotherPhase Exception                  
-                    def run_a_phase(the_phase, retval=[]):
+                    def run_a_phase(the_phase, retval=[], extra_keywords={}):
                         try:
-                            retval.append( the_phase(ex=self, config=self.config, result=self.result, **kwargs) )
-                        except DependsOnAnotherPhase, err:
+                            retval.append( the_phase(ex=self, config=self.config, result=self.result, **extra_keywords) )
+                        except DependsOnAnotherPhase as err:
                             self.log.info('\n================================================================================')
                             self.log.info('The phase %s depends on %s. Now executing that one first...', P, err.depends_on)
                             tic=time.time()
-                            run_a_phase(self._find_phase(err.depends_on))
+                            run_a_phase(self._find_phase(err.depends_on),extra_keywords={})
                             tac=time.time()
                             self.log.info('Finished %s. Took %g seconds.', err.depends_on, tac-tic)
                             self.log.info('\n================================================================================')
                             self.log.info('And now trying to run %s again...', the_phase)
-                            retval.append(run_a_phase(the_phase))
-                    run_a_phase(P, retval)
+                            retval.append(run_a_phase(the_phase, extra_keywords=extra_keywords))
+                    run_a_phase(P, retval, extra_keywords=kwargs)
                            
                 elif not allowed:
                     self.log.error('The %s is not allowed to be run at this point.',P)

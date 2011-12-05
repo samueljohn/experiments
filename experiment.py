@@ -734,8 +734,10 @@ class Experiment(object):
 
 
     def reuse(self, reusefile):
-        '''Loading and re-using an old result file.'''    
+        '''Loading and re-using an old result file.'''
         logger = logging.getLogger('reuse')
+        self.unique_ending = timehost_string()
+        logger.info('Setting unique_name to %s', self.unique_name)
         if not reusefile and self.config.has_key('REUSE_FILE'):
             reusefile = self.config['REUSE_FILE']
         if reusefile:

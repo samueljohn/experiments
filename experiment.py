@@ -150,8 +150,8 @@ def enable_logging(loglevel=logging.INFO, stream=None):
     if len(rootLogger.handlers)==0:
         rootLogger.setLevel(loglevel)
         #rootLogger.handlers = []
-        loggingStderrHandler = logging.StreamHandler(stream )
-        #loggingStderrHandler.setLevel( loglevel )
+        loggingStderrHandler = logging.StreamHandler(stream)
+        #loggingStderrHandler.setLevel(loglevel)
         formatter = logging.Formatter('%(levelname)-7s %(name)10s: %(message)s')
         loggingStderrHandler.setFormatter(formatter)
         rootLogger.addHandler(loggingStderrHandler)
@@ -601,6 +601,72 @@ class Experiment(object):
     __repr__ = __str__
     
     
+    @property
+    def stderrloglevel(self):
+        return self.__stderrloglevel
+
+    @stderrloglevel.setter
+    def stderrloglevel(self,l):
+        if isinstance(l,str):
+            ll = l.lower().strip()
+            if ll in self.loglevels.keys():
+                ll = self.loglevels[ll]
+            self.__stderrloglevel = int(ll)
+        else:
+            self.__stderrloglevel = int(l)
+        self._setup_logging()  
+        self.log.info('stderrloglevel is %s',logging.getLevelName(self.__stderrloglevel))
+
+        
+    @property
+    def fileloglevel(self):
+        return self.__stderrloglevel
+    
+    @fileloglevel.setter
+    def fileloglevel(self,l):
+        if isinstance(l,str):
+            ll = l.lower().strip()
+            if ll in self.loglevels.keys():
+                ll = self.loglevels[ll]
+            self.__fileloglevel = int(ll)
+        else:
+            self.__fileloglevel = int(l)    
+        self._setup_logging()  
+        self.log.info('fileloglevel is %s',logging.getLevelName(self.__fileloglevel))
+        
+
+    @property
+    def loglevel(self):
+        return self.__stderrloglevel
+    
+    @loglevel.setter
+    def loglevel(self,l):
+        if isinstance(l,str):
+            ll = l.lower().strip()
+            if ll in self.loglevels.keys():
+                ll = self.loglevels[ll]
+            self.__loglevel = int(ll)
+        else:
+            self.__loglevel = int(l)    
+        self._setup_logging()  
+        self.log.info('loglevel is %s',logging.getLevelName(self.__loglevel))
+        
+    
+    def _setup_logging(self):
+        rootLogger = logging.getLogger()
+        rootLogger.setLevel(self.__loglevel)
+        if len(rootLogger.handlers) == 0:
+            loggingStderrHandler = logging.StreamHandler(sys.stderr)
+            formatter = logging.Formatter('%(levelname)-7s %(name)10s: %(message)s')
+            loggingStderrHandler.setFormatter(formatter)
+            rootLogger.addHandler(loggingStderrHandler)
+        for h in rootLogger.handlers:
+            if isinstance(h,logging.FileHandler):
+                h.setLevel(self.__fileloglevel)
+            elif isinstance(h, logging.StreamHandler):
+                h.setLevel(self.__stderrloglevel)
+        return
+    
     
     def set_config(self, config=None, name='run', reusefile=None):
         '''Set a config for this experiment.
@@ -614,15 +680,9 @@ class Experiment(object):
             store the log and result files. Older files will not be overwritten.
             
         '''
-        
+        self._setup_logging()
         rootLogger = logging.getLogger()
-        rootLogger.handlers = []
-        enable_logging(loglevel=self.__loglevel)
-        rootLogger.handlers[-1].setLevel(self.__stderrloglevel)
         rootLogger.info('set_config(config=%s):',str(config))
-        #print('Global loglevel is', logging.getLevelName( rootLogger.level ) )
-        sys.stdout.flush()
-        rootLogger.info('stderrloglevel is %s',logging.getLevelName(self.__stderrloglevel))
 
         # Populating self.phases -----------------------------------------------
         if self.__raw_phases is None:
@@ -693,10 +753,11 @@ class Experiment(object):
         if self.__logfile:
             logfile = os.curdir + os.sep + self.config.NAME + os.sep + self.__logfile 
             backupFile(logfile, '.bak')
+            # Remove any other (older) FileHandlers
+            rootLogger.handlers = [h for h in rootLogger.handlers if not isinstance(h,logging.FileHandler)]
             loggingFileHandler = logging.FileHandler( logfile, mode='w' )
             loggingFileHandler.setLevel( self.__fileloglevel )
             loggingFileHandler.setFormatter(logging.Formatter('%(levelname)-7s %(name)10s: %(message)s'))
-            enable_logging()
             rootLogger.addHandler(loggingFileHandler)
             rootLogger.info( 'logfile: ' + str(logfile) )
 

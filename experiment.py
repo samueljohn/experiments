@@ -105,7 +105,7 @@ import sys
 import time
 import unittest
 import platform
-
+import pickle
 
 
 def time_string():
@@ -974,6 +974,8 @@ class Experiment(object):
                     except TypeError as e:
                         self.log.error('Cannot save %s (%s) to result file.', str(k), str(v))
                     except RuntimeError as e:
+                        self.log.error('Cannot save %s (%s) to result file.', str(k), str(v))
+                    except pickle.PicklingError as e:
                         self.log.error('Cannot save %s (%s) to result file.', str(k), str(v))
             self.log.warn('==> Saving new results to %s', self.config.RESULT_FILE)
         else:
